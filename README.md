@@ -31,8 +31,12 @@ Windows 98 FE (4.10.1998), 98 SE (4.10.2222), x86 XP RTM
 (2600.xpclient.010817-1148), and x86 XP Professional SP3
 (2600.xpsp.080413-2111). Physical-hardware and editor-release validation
 remain open. Before milestone 2, the next independent step was to decode
-and display actual ILBM artwork. The viewer now passes its fixture tests
-and Windows 11 smoke test; it has not run on Windows 98 or XP. See the
+and display actual ILBM artwork. The viewer now passes its fixture tests,
+Windows 11 smoke test and exact XP RTM/SP3 framebuffer comparisons.
+Windows 98 FE/SE now match the independently measured display conversion,
+but their six-bit Cirrus channels still merge two background colors: 16
+distinct RGB colors, not the required 17. Viewer fidelity qualification
+remains blocked on that requirement. See the
 [probe matrix](PROGRESS.md#runtime-evidence) and
 [viewer evidence](PROGRESS.md#milestone-2--real-asset-ilbm-viewer).
 
@@ -145,8 +149,11 @@ $root = (Resolve-Path '.\inputs\Viewer Assets').Path
 The background opens first. Use **File → Background** and **File →
 Picture** to switch or retry after an error. The viewer paints at 1:1 at
 the upper left of the client area; it is not the editor. Both menu choices
-take the same path: their fixed leaf names are resolved only under the
-selected absolute local drive folder, never under the working directory.
+use an indexed DIB and realize the image palette on paint and palette
+activation/change, rather than mapping true-color pixels to the default
+system palette on 256-color displays. Their fixed leaf names are resolved
+only under the selected absolute local drive folder, never under the
+working directory.
 This restriction applies to both names, not just `blueface.16`. Relative,
 parent-traversing, UNC and device paths are not accepted. On NT the viewer
 still rejects reparse points (including junctions), multiply-linked files

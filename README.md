@@ -1,21 +1,27 @@
 # AmigaVid
 
-AmigaVid is an early-setup project to create a native, offline, 32-bit x86
-Win32 port of Almathera's Amiga CD32 Video Creator for Windows 98 and XP. No
-Amiga emulator or ROM is required at runtime.
+AmigaVid aims to bring Almathera's Amiga CD32 Video Creator to Windows 98 and
+XP as a native, offline, 32-bit x86 Win32 port. No Amiga emulator or ROM is
+required at runtime.
 
 See [Video-Creator-Win32-PRD.md](Video-Creator-Win32-PRD.md) for detailed
 requirements and acceptance evidence.
 
 ## Expected phases
 
-0. **Establish the baseline:** verified archive and source inventory.
-1. **Prove the Windows toolchain:** compatibility probe.
-2. **Open a real asset:** real asset display.
-3. **Edit, save and replay one sequence:** edit, save and replay a sequence.
-4. **Port effects and special screens:** effects and special screens.
-5. **Complete media, editor and persistence:** media, editor and persistence.
-6. **Qualify and package:** qualification and portable packaging.
+0. **Establish the baseline:** verify the pinned archive and inventory source
+   files and assets.
+1. **Prove the Windows toolchain:** show a native probe opening a window and
+   exercising input.
+2. **Open a real asset:** decode and display actual editor artwork.
+3. **Edit, save and replay one sequence:** save, reopen and replay a
+   two-image sequence with a timed transition.
+4. **Port all effects and special screens:** port vectors, QuadAnims, text and
+   palette effects.
+5. **Complete media, editor and persistence:** finish CD audio, cue marking
+   and Random Raves.
+6. **Qualify and package:** qualify the same portable ZIP on both Windows
+   families.
 
 ## Current focus
 

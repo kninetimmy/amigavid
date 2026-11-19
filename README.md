@@ -149,11 +149,17 @@ take the same path: their fixed leaf names are resolved only under the
 selected absolute local drive folder, never under the working directory.
 This restriction applies to both names, not just `blueface.16`. Relative,
 parent-traversing, UNC and device paths are not accepted. On NT the viewer
-rejects reparse points in the path (including junctions) and linked or
-non-regular files; on 9x it requires a local FAT/FAT32 drive. Use
-ANSI-representable paths within `MAX_PATH`. The decoder handles indexed
-1–8 plane ILBM with raw or ByteRun1 rows (up to 1024×1024 and 4 MiB input);
-HAM, Extra Half-Brite, masks and other formats are not supported here.
+still rejects reparse points (including junctions), multiply-linked files
+and non-regular files. Previously it checked each directory but used
+absolute paths for later opens. Now it opens the directly mapped local
+volume's root once per read and opens each subsequent name relative to
+its checked parent handle. It refuses directory aliases (such as `SUBST`)
+and does not fall back to absolute paths if safe resolution fails.
+On 9x it still requires a local FAT/FAT32 drive and opens by absolute
+path. Use ANSI-representable paths within `MAX_PATH`. The decoder handles
+indexed 1–8 plane ILBM with raw or ByteRun1 rows (up to 1024×1024 and
+4 MiB input); HAM, Extra Half-Brite, masks and other formats are not
+supported here.
 
 ## First useful demo and release acceptance
 

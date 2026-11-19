@@ -2,12 +2,46 @@
 #include <windows.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 #include "ilbm.h"
 
 #define TITLE "AmigaVid ILBM Viewer"
 #define CLASS_NAME "AmigaVidAsset"
 #define OPEN_BACKGROUND 100
 #define OPEN_PICTURE 101
+
+/* User-mode NtOpenFile ABI; resolved only on NT, not imported on 9x. */
+#define NT_CASE_INSENSITIVE 0x40
+#define NT_SYNCHRONOUS_IO_NONALERT 0x000020
+#define NT_OPEN_REPARSE_POINT 0x200000
+#define NT_NO_SUCH_FILE ((LONG)0xc000000fUL)
+#define NT_OBJECT_NAME_NOT_FOUND ((LONG)0xc0000034UL)
+#define NT_OBJECT_PATH_NOT_FOUND ((LONG)0xc000003aUL)
+
+struct nt_name {
+    USHORT length, capacity;
+    WCHAR *text;
+};
+
+struct nt_object_attributes {
+    ULONG length;
+    HANDLE parent;
+    struct nt_name *name;
+    ULONG attributes;
+    PVOID security_descriptor, security_qos;
+};
+
+struct nt_io_status {
+    union {
+        LONG status;
+        PVOID pointer;
+    } result;
+    ULONG_PTR information;
+};
+
+typedef LONG (WINAPI *nt_open_file)(HANDLE *, ACCESS_MASK, struct nt_object_attributes *,
+                                    struct nt_io_status *, ULONG, ULONG);
+typedef DWORD (WINAPI *query_dos_device)(LPCWSTR, LPWSTR, DWORD);
 
 static const char *const names[] = { "blankeditor.iff", "blueface.16" };
 static char root[MAX_PATH];  /* Absolute drive path, with a trailing backslash. */
@@ -72,49 +106,143 @@ static int set_root(const char *arg)
     return 1;
 }
 
+static LONG nt_open(nt_open_file open_file, HANDLE parent, WCHAR *text, size_t len,
+                    int directory, HANDLE *file)
+{
+    struct nt_name name;
+    struct nt_object_attributes attrs = { 0 };
+    struct nt_io_status io;
+
+    name.length = name.capacity = (USHORT)(len * sizeof(*text));
+    name.text = text;
+    attrs.length = sizeof(attrs);
+    attrs.parent = parent;
+    attrs.name = &name;
+    attrs.attributes = NT_CASE_INSENSITIVE;
+    /* Check directory type on the returned handle instead of combining
+       FILE_DIRECTORY_FILE with FILE_OPEN_REPARSE_POINT. */
+    return open_file(file, directory ? FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES |
+                     SYNCHRONIZE : FILE_GENERIC_READ,
+                     &attrs, &io, FILE_SHARE_READ, NT_OPEN_REPARSE_POINT |
+                     NT_SYNCHRONOUS_IO_NONALERT);
+}
+
+static int disk_device(const WCHAR *device)
+{
+    static const WCHAR *const prefixes[] = { L"\\Device\\HarddiskVolume", L"\\Device\\Floppy" };
+    const WCHAR *p;
+    unsigned i;
+    size_t len;
+
+    /* Only direct disk volume/floppy mappings, never aliases to a directory. */
+    for (i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); ++i) {
+        len = wcslen(prefixes[i]);
+        if (_wcsnicmp(device, prefixes[i], len) == 0) {
+            p = device + len;
+            return *p && p[wcsspn(p, L"0123456789")] == L'\0';
+        }
+    }
+    return 0;
+}
+
+static int ordinary_directory(HANDLE dir)
+{
+    BY_HANDLE_FILE_INFORMATION info;
+
+    return GetFileType(dir) == FILE_TYPE_DISK && GetFileInformationByHandle(dir, &info) &&
+           (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY |
+            FILE_ATTRIBUTE_REPARSE_POINT)) == FILE_ATTRIBUTE_DIRECTORY;
+}
+
+static const char *open_nt_asset(const char *leaf, HANDLE *dirs, unsigned *count, HANDLE *file)
+{
+    HMODULE ntdll = GetModuleHandleA("ntdll.dll"), kernel = GetModuleHandleA("kernel32.dll");
+    nt_open_file open_file = ntdll ? (nt_open_file)GetProcAddress(ntdll, "NtOpenFile") : NULL;
+    query_dos_device query = kernel ? (query_dos_device)GetProcAddress(kernel, "QueryDosDeviceW") : NULL;
+    WCHAR drive[3], text[MAX_PATH];
+    const char *start = root + 3, *p;
+    size_t i, len;
+    int n;
+    LONG status;
+    HANDLE handle;
+
+    if (!open_file || !query)
+        return "Cannot safely resolve asset paths on this system.";
+    drive[0] = root[0];
+    drive[1] = L':';
+    drive[2] = L'\0';
+    if (!query(drive, text, MAX_PATH) || !disk_device(text))
+        return "Asset root must be on a directly mapped local disk.";
+    len = wcslen(text);
+    text[len++] = L'\\';  /* Open the filesystem root, not the volume itself. */
+    if (nt_open(open_file, NULL, text, len, 1, &handle) != 0)
+        return "Cannot open the asset drive root.";
+    dirs[(*count)++] = handle;
+    if (!ordinary_directory(handle))
+        return "Asset drive root must be a local directory, not a reparse point.";
+
+    /* Each lookup has exactly one name and the actual checked parent handle.
+       Keep the chain open without share-write/delete until the read finishes. */
+    for (p = start; *p; p = CharNextA(p)) {
+        if (*p != '\\')
+            continue;
+        n = MultiByteToWideChar(CP_ACP, MB_ERR_INVALID_CHARS, start, (int)(p - start),
+                                text, MAX_PATH);
+        if (!n || text[n - 1] == L'.' || text[n - 1] == L' ')
+            return "Invalid asset-root component.";
+        for (i = 0; i < (size_t)n; ++i) {
+            if (text[i] < 32 || wcschr(L"\\/:\"<>|?*", text[i]))
+                return "Invalid asset-root component.";
+        }
+        if (nt_open(open_file, dirs[*count - 1], text, n, 1, &handle) != 0)
+            return "Cannot open an asset-root directory.";
+        dirs[(*count)++] = handle;
+        if (!ordinary_directory(handle))
+            return "Asset-root components must be directories, not reparse points.";
+        start = p + 1;
+    }
+
+    /* Both fixed ASCII leaf names use this same handle-relative open. */
+    for (len = 0; leaf[len]; ++len)
+        text[len] = leaf[len];
+    status = nt_open(open_file, dirs[*count - 1], text, len, 0, &handle);
+    if (status == NT_NO_SUCH_FILE || status == NT_OBJECT_NAME_NOT_FOUND ||
+        status == NT_OBJECT_PATH_NOT_FOUND)
+        return "Missing asset. Check the selected asset root.";
+    if (status != 0)
+        return "Cannot open asset from the selected root.";
+    *file = handle;
+    return NULL;
+}
+
 static const char *read_asset(const char *name, struct ilbm_image *image)
 {
-    char path[MAX_PATH], *p;
     HANDLE dirs[MAX_PATH / 2], file = INVALID_HANDLE_VALUE;
     unsigned count = 0;
     BY_HANDLE_FILE_INFORMATION info;
-    DWORD size, got, error;
+    DWORD size, got;
     unsigned char *data = NULL;
     const char *problem;
 
-    strcpy(path, root);
     if (!win9x) {
-        /* Open each prefix without traversing a reparse point; keep it open
-           without share-write/delete until the leaf has been read. */
-        for (p = path + 3; *p; p = CharNextA(p)) {
-            if (*p != '\\')
-                continue;
-            *p = '\0';
-            dirs[count] = CreateFileA(path, FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES,
-                                      FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS |
-                                      FILE_FLAG_OPEN_REPARSE_POINT, NULL);
-            *p = '\\';
-            problem = "Cannot open an asset-root directory.";
-            if (dirs[count] == INVALID_HANDLE_VALUE)
-                goto done;
-            if (!GetFileInformationByHandle(dirs[count++], &info))
-                goto done;
-            problem = "Asset-root components must be directories, not reparse points.";
-            if ((info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY |
-                 FILE_ATTRIBUTE_REPARSE_POINT)) != FILE_ATTRIBUTE_DIRECTORY)
-                goto done;
+        problem = open_nt_asset(name, dirs, &count, &file);
+        if (problem)
+            goto done;
+    } else {
+        char path[MAX_PATH];
+        DWORD error;
+
+        strcpy(path, root);
+        strcat(path, name);
+        file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
+                           FILE_ATTRIBUTE_NORMAL, NULL);
+        if (file == INVALID_HANDLE_VALUE) {
+            error = GetLastError();
+            problem = error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND ?
+                      "Missing asset. Check the selected asset root." :
+                      "Cannot open asset from the selected root.";
+            goto done;
         }
-    }
-    strcat(path, name);
-    file = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
-                       win9x ? FILE_ATTRIBUTE_NORMAL :
-                       FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, NULL);
-    if (file == INVALID_HANDLE_VALUE) {
-        error = GetLastError();
-        problem = error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND ?
-                  "Missing asset. Check the selected asset root." :
-                  "Cannot open asset from the selected root.";
-        goto done;
     }
     problem = "Asset must be a regular local file, not a directory or link.";
     if (GetFileType(file) != FILE_TYPE_DISK ||

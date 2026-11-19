@@ -141,8 +141,10 @@ validation. The Windows 11 `/noaudio` check above remains simulated.
   x86 PE32 GUI, OS/subsystem 4.0, static `WinMain` startup, and direct
   GDI32, KERNEL32 and USER32 imports (no WinMM, CRT DLL or delay imports).
   `VCASSET.EXE` SHA-256:
-  `63b43f6cab2d51d50494e5f427f5293a3dcc420c8ea52d05eb0f3ea8984464b7`.
+  `d2fbc0c3a1ab8213fb238fcf0b5669bce8334973dc008a88b96cff95de2c4d85`.
   `.asset/PE-IMPORTS.txt` and `.asset/viewer.map` are local build evidence.
+  The correction did not change the direct import list. `NtOpenFile` and
+  `QueryDosDeviceW` are resolved at runtime on NT only.
 - **Viewer host smoke pass:** Windows 11 Pro x64 build 26300.9974. The
   viewer opened and switched images from a root with spaces and a
   different working directory. Five painted client pixels per image and
@@ -151,9 +153,20 @@ validation. The Windows 11 `/noaudio` check above remains simulated.
   the sampled pixels. Missing and corrupt opens showed filename-specific
   dialogs; repaint kept the current picture, and the next valid open worked
   in the same window. The smoke also rejected parent traversal, an ancestor
-  junction, a leaf junction and a multiply-linked file.
+  junction, a leaf junction, a multiply-linked file and a regular file in
+  a directory position.
   `.asset/HOST-SMOKE.txt`, `background.bmp`, and `picture.bmp` are local
   output under `.asset/`, not release assets.
+- **NT containment by source inspection:** after opening and checking the
+  directly mapped volume root, the resolver passes only one name and the
+  already checked parent handle to each `NtOpenFile` call. It opens
+  reparse points without following them and rejects them by handle before
+  descending or reading. The checked chain stays open through the read;
+  no subsequent absolute lookup or fallback occurs on NT. This applies
+  to both menu choices. See Microsoft's [native file-open semantics](
+  https://learn.microsoft.com/en-us/windows/win32/api/winternl/nf-winternl-ntcreatefile).
+  The smoke checks ordinary paths and static rejection, not concurrent
+  changes or every filesystem and filter combination.
 
 | Fixture | Top-down RGB24 SHA-256 |
 | --- | --- |
@@ -162,8 +175,9 @@ validation. The Windows 11 `/noaudio` check above remains simulated.
 
 **Outstanding viewer checks:** Windows 98 FE, 98 SE, x86 XP RTM and x86 XP
 SP3 have not run this viewer; the four guest passes above are probe results
-only. Check the viewer loader/imports, FAT path branch, native display on
-legacy color modes, and both open/repaint/recovery workflows on the targets.
+only. Check the viewer loader/imports, 9x FAT path branch, XP handle-relative
+opens, native display on legacy color modes, and both open/repaint/recovery
+workflows on the targets.
 Physical hardware and the full editor workflow also remain unverified.
 
 ### Before/after inventory
@@ -174,10 +188,10 @@ Physical hardware and the full editor workflow also remain unverified.
 | `PROGRESS.md` | Archive baseline and four probe passes still apply, with the same limits. The viewer has its own results and pending target checks. |
 | `.gitignore` | Existing local roots still ignored; `.asset/` is now ignored too. |
 | `asset/ilbm.h`, `asset/ilbm.c` | No portable decoder → bounded indexed ILBM to top-down RGB24 with a matching release function. |
-| `asset/viewer.c` | No real-asset window → Win32 viewer with two fixed menu choices. This shared root restriction covers **both** leaf names; raw/ByteRun1 and parser limits likewise apply to both. |
+| `asset/viewer.c` | No real-asset window → Win32 viewer with two fixed menu choices. NT directory checks followed by absolute opens → an initial volume-root open followed only by one-name opens through checked parent handles, or refusal. The NT link checks, 9x FAT/FAT32 path, bounded read, decode and display/recovery flow remain. The shared path and parser rules cover **both** fixed leaf names. |
 | `asset/decode_test.c` | No host decoder driver → native CLI exercising the GUI's decoder. |
 | `tools/asset.py` | No viewer workflow → local fixture preparation, build, tests and smoke commands. Reuses the probe's pin/extraction and PE checks without changing them. |
-| `tools/asset_smoke.py` | No viewer smoke harness → actual window tests with local-only captures and a log. |
+| `tools/asset_smoke.py` | No viewer smoke harness → actual window tests with local-only captures and a log. All prior cases remain; a regular file in a directory position is now checked too. |
 | `probe/probe.c`, `probe/TEST.TXT`, `tools/probe.py`, `tools/probe_smoke.py`, `tools/inventory.py` | Unchanged tools and probe kit. The probe still uses its original executable-relative synthetic DAT; viewer root selection is separate. The archive inventory still does no extraction. |
 
 ## Open blockers

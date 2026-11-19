@@ -277,6 +277,10 @@ def exercise(exe, digest, art, cwd, names, rgb_digests, out):
                 close(process, hwnd)
         finally:
             junction.rmdir()
+        with launch(outside / "Not A Child Directory") as process:
+            hwnd = wait_for(process, "viewer window", lambda: window_of(process, "AmigaVidAsset"))
+            dismiss_error(process, names[0], "Asset-root components must be directories")
+            close(process, hwnd)
         with launch(str(art / ".." / cwd.name)) as process:
             dismiss_error(process, "Invalid asset root")
             if process.wait(timeout=10) != 2:

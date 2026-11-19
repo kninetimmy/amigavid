@@ -25,9 +25,12 @@ requirements and acceptance evidence.
 
 ## Current focus
 
-Before milestone 1, the archive baseline was documented but no probe had
-been built or run. Now the Open Watcom Win32 probe has a repeatable build
-and a modern-host smoke test. Windows 98 and XP qualification is pending.
+The Open Watcom Win32 probe has a repeatable build and a Windows 11 host
+smoke test. The unchanged kit also passes under QEMU on Windows 98 FE
+(4.10.1998), 98 SE (4.10.2222), and x86 XP RTM
+(2600.xpclient.010817-1148). x86 XP SP3 is the next untested probe target;
+physical-hardware validation remains open. See the
+[live progress matrix](PROGRESS.md#runtime-evidence) for results and limits.
 
 ## Build and test the Win32 probe
 
@@ -63,7 +66,9 @@ On an interactive, unlocked host desktop, `smoke` runs the extracted
 directory. It samples the painted DIB, posts mouse and keyboard window
 messages, checks the actual WinMM count and simulated no-audio status,
 and checks clean exits and missing/malformed-file dialogs. See
-`.probe/HOST-SMOKE.txt` for the observed results.
+`.probe/HOST-SMOKE.txt` for the observed results. The recorded Windows 11
+run reported actual `waveOut=3`; its `/noaudio` check was simulated, not a
+true zero-output-device test.
 
 Verify `.probe/VCPROBE.ZIP` against `.probe/VCPROBE.ZIP.sha256` on the
 modern host. On each target, follow the included [TEST.TXT](probe/TEST.TXT):
@@ -91,8 +96,10 @@ mismatch exits nonzero with a diagnostic on stderr and produces no inventory.
 The script also accepts a local ZIP path as its only argument when the archive
 cannot be placed under `inputs/`.
 
-See [the archive baseline](docs/BASELINE.md) for the input map, retained
-reference material, blockers, attribution, and target-status matrix.
+See [the historical milestone 0 archive baseline](docs/BASELINE.md) for the
+input map, retained reference material, blockers, attribution, and pre-probe
+target-status matrix. Its pending rows are historical; use the
+[live progress matrix](PROGRESS.md#runtime-evidence) for current status.
 
 ## First useful demo and release acceptance
 
@@ -102,4 +109,5 @@ with the same executable.
 
 Release acceptance is stricter: the same portable ZIP must pass the edit,
 save, reopen and playback workflow on both Windows families. A modern-host
-smoke test does not qualify either target.
+smoke test does not qualify either target, and guest probe passes are not
+editor-release or physical-hardware validation.

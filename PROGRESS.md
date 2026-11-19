@@ -17,8 +17,8 @@
 Before milestone 1 the next step was to qualify the Open Watcom probe;
 milestone 0 itself made no build, runtime, or target-OS test claim.
 The probe now builds and passes the Windows 11 host smoke test and the
-three QEMU guest checks below. x86 XP SP3 is the next untested probe
-target; physical-hardware qualification remains open.
+four QEMU guest checks below (Windows 98 FE/SE and x86 XP RTM/SP3).
+Physical-hardware and editor-release qualification remain open.
 [Build and test commands](README.md#build-and-test-the-win32-probe).
 
 ### Build and PE evidence
@@ -65,7 +65,7 @@ target; physical-hardware qualification remains open.
 | Windows 98 First Edition (4.10.1998) | **QEMU guest probe pass** — Explorer/`COMMAND.COM`, DIB/repaint, input, actual `waveOut=0`, closure and companion recovery as detailed below. |
 | Windows 98 Second Edition (4.10.2222) | **QEMU guest probe pass** — same checks. |
 | Windows XP RTM (x86, 2600.xpclient.010817-1148) | **QEMU guest probe pass** — same checks. |
-| Windows XP SP3 (x86) | **Untested — next probe target** for the same checklist. |
+| Windows XP Professional SP3 (x86, 2600.xpsp.080413-2111) | **QEMU guest probe pass** — same checks. |
 
 **Windows 11 host smoke (not target evidence)**
 
@@ -85,17 +85,26 @@ zero-output-device run was available on the host.
 
 **QEMU target-OS observations**
 
-All three guests used the unchanged checksummed kit identified by the ZIP
+All four guests used the unchanged checksummed kit identified by the ZIP
 digest below, extracted to a guest folder with a space, with no added CRT.
 
 - Windows 98 FE and SE: QEMU TCG, Pentium, 64 MiB RAM, Cirrus graphics at
   640×480 with 256 colors, no NIC or sound card, empty IDE CD-ROM.
 - x86 XP RTM: QEMU TCG, Pentium III, 256 MiB RAM, standard VGA at
   640×480×32, no NIC or sound card, IDE CD-ROM with the installation CD.
+- x86 XP Professional SP3: `winver` 5.1, build
+  `2600.xpsp.080413-2111 : Service Pack 3`; a separate overlay of the RTM
+  baseline was upgraded with Microsoft-signed SP2 and SP3. QEMU TCG,
+  Pentium III, 256 MiB RAM, standard VGA at 640×480×32, no NIC or sound
+  card, empty IDE CD-ROM (unlike the RTM run). All three files on the
+  read-only transfer floppy matched the pinned kit byte for byte.
 - On each guest, offline launches from Explorer and a Windows
   `COMMAND.COM` session passed. Framebuffer pixel sampling confirmed the
   red/green/blue/red quadrants and white cross at launch, after repaint
   and after companion recovery.
+- On SP3, Show Desktop hid and restored the window. Host framebuffer
+  samples were exact red/green/blue/red/white at launch, after restore
+  and after DAT recovery; samples while hidden differed.
 - Mouse click and Space changed the caption to `Mouse` and `Space`.
   Esc and the window's X both closed the probe. Numeric target process
   exit codes were not captured.
@@ -105,6 +114,8 @@ digest below, extracted to a guest folder with a space, with no added CRT.
 - Missing `VCPROBE.DAT` displayed the missing-companion dialog; a
   zero-length DAT displayed the invalid-companion dialog. Restoring the
   original DAT allowed relaunch from Explorer with the expected image.
+- After SP3 guest shutdown, `qemu-img check` found no errors; the RTM
+  backing disk's hash was unchanged.
 
 These are guest probe passes, not physical-hardware or editor-release
 validation. The Windows 11 `/noaudio` check above remains simulated.
@@ -130,7 +141,7 @@ validation. The Windows 11 `/noaudio` check above remains simulated.
 
 ## Next milestone
 
-Run the [target checklist](probe/TEST.TXT) with the same checksummed kit
-next on x86 XP SP3, which is untested. Obtain physical Windows 98 and XP
-results before claiming native hardware validation. Independent milestone
-2 ILBM decoding work can proceed while those results are pending.
+Milestone 2 real-asset ILBM decoding and display is the next independent
+development step. Obtain physical Windows 98 and XP
+[target-checklist](probe/TEST.TXT) results before claiming native hardware
+validation. Editor-release workflows remain unverified.

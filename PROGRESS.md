@@ -2,7 +2,8 @@
 
 ## Milestone 0 — archive baseline
 
-- Baseline: [docs/BASELINE.md](docs/BASELINE.md).
+- Historical baseline: [docs/BASELINE.md](docs/BASELINE.md); its pre-probe
+  compatibility matrix is not the current target status.
 - Local reference input verified: `vc.zip` is 21,193,157 bytes with SHA-256
   `ef4622f337e4e6331fdc97d5da6ec54d35f0d39bcd28ab898ce3689b8fb36ee3`.
   Its ZIP CRC check found no bad member; the central directory has 1,225 files
@@ -15,8 +16,10 @@
 
 Before milestone 1 the next step was to qualify the Open Watcom probe;
 milestone 0 itself made no build, runtime, or target-OS test claim.
-Now the probe builds and passes a modern-host smoke test. Stock target
-qualification remains open. [Build and test commands](README.md#build-and-test-the-win32-probe).
+The probe now builds and passes the Windows 11 host smoke test and the
+three QEMU guest checks below. x86 XP SP3 is the next untested probe
+target; physical-hardware qualification remains open.
+[Build and test commands](README.md#build-and-test-the-win32-probe).
 
 ### Build and PE evidence
 
@@ -49,19 +52,22 @@ qualification remains open. [Build and test commands](README.md#build-and-test-t
   import from the loader's requirements. The CRT also looks up the
   environment-string APIs at runtime and optionally resolves
   `USER32!GetActiveWindow` on an exception path; these fallback paths
-  were source-inspected, not exercised. Verify the loader, the actual
-  stock DLL exports and their transitive requirements on each target.
+  were source-inspected, not separately exercised. The guest launches
+  below establish loader success on those installations, not a complete
+  stock-DLL export/transitive-dependency audit or physical CPU-floor test.
   Windows 11's WOW64 and API-set dependencies are not evidence for 98/XP.
 
 ### Runtime evidence
 
 | Target | Status and evidence |
 | --- | --- |
-| Windows 11 Pro x64 26300.9974 (development host) | **Pass**: Ryzen 7 5700X3D, 64 GiB, Radeon RX 9070 XT, 3840×2160×32, WinMM reported three wave outputs; no optical drive enumerated. |
-| Windows 98 First Edition | Pending — stock loader, Explorer/`COMMAND.COM`, DIB, input and audio-device checks. |
-| Windows 98 Second Edition | Pending — same checks. |
-| Windows XP RTM (x86) | Pending — same checks. |
-| Windows XP SP3 (x86) | Pending — same checks. |
+| Windows 11 Pro x64 26300.9974 (development host) | **Host smoke pass**: Ryzen 7 5700X3D, 64 GiB, Radeon RX 9070 XT, 3840×2160×32, WinMM reported three wave outputs; no optical drive enumerated. Not a target-OS test. |
+| Windows 98 First Edition (4.10.1998) | **QEMU guest probe pass** — Explorer/`COMMAND.COM`, DIB/repaint, input, actual `waveOut=0`, closure and companion recovery as detailed below. |
+| Windows 98 Second Edition (4.10.2222) | **QEMU guest probe pass** — same checks. |
+| Windows XP RTM (x86, 2600.xpclient.010817-1148) | **QEMU guest probe pass** — same checks. |
+| Windows XP SP3 (x86) | **Untested — next probe target** for the same checklist. |
+
+**Windows 11 host smoke (not target evidence)**
 
 `.probe/HOST-SMOKE.txt`: launched the extracted EXE with a different
 working directory. Read red, green, blue, red and white samples from the
@@ -72,12 +78,38 @@ palette index each displayed an invalid-data error and exited 3.
 Restoring the companion allowed relaunch and exit 0. Separately
 `.probe/EXPLORER-SMOKE.txt` records Windows 11 shell open from a directory
 with spaces and exit 0. No physical keystrokes or `COMMAND.COM` run were
-claimed. The EXE always queries `waveOutGetNumDevs` and never opens an
+claimed on this host. The EXE queries `waveOutGetNumDevs` and never opens an
 audio device. `/noaudio` exercised the shared no-audio status and clean
 exit with `simulated` and the true count of 3 in the caption; no real
-zero-output-device run was available.
+zero-output-device run was available on the host.
 
-| Artifact in the local worktree | SHA-256 |
+**QEMU target-OS observations**
+
+All three guests used the unchanged checksummed kit identified by the ZIP
+digest below, extracted to a guest folder with a space, with no added CRT.
+
+- Windows 98 FE and SE: QEMU TCG, Pentium, 64 MiB RAM, Cirrus graphics at
+  640×480 with 256 colors, no NIC or sound card, empty IDE CD-ROM.
+- x86 XP RTM: QEMU TCG, Pentium III, 256 MiB RAM, standard VGA at
+  640×480×32, no NIC or sound card, IDE CD-ROM with the installation CD.
+- On each guest, offline launches from Explorer and a Windows
+  `COMMAND.COM` session passed. Framebuffer pixel sampling confirmed the
+  red/green/blue/red quadrants and white cross at launch, after repaint
+  and after companion recovery.
+- Mouse click and Space changed the caption to `Mouse` and `Space`.
+  Esc and the window's X both closed the probe. Numeric target process
+  exit codes were not captured.
+- Each guest reported actual, unsimulated `No audio (WinMM waveOut=0)`
+  without `/noaudio`. This verifies the zero-device status path, not
+  audio playback; the probe only counts devices.
+- Missing `VCPROBE.DAT` displayed the missing-companion dialog; a
+  zero-length DAT displayed the invalid-companion dialog. Restoring the
+  original DAT allowed relaunch from Explorer with the expected image.
+
+These are guest probe passes, not physical-hardware or editor-release
+validation. The Windows 11 `/noaudio` check above remains simulated.
+
+| Recorded local artifact (not tracked) | SHA-256 |
 | --- | --- |
 | `.probe/VCPROBE.ZIP` (sidecar `.probe/VCPROBE.ZIP.sha256`) | `a317af6fe0277a8eb9895bc24d204efeb389d84ce7a636ad15d1073b3c1b3760` |
 | `.probe/build/VCPROBE.EXE` | `0c26c1b8e7582507e1a83b8bd257bfc29b12f62013c6b994cc16bc568461f050` |
@@ -90,15 +122,15 @@ zero-output-device run was available.
   absent from the archive.
 - Bundled third-party code and media need separate redistribution review,
   including the Commodore-Amiga notice in `vc/modules/screen.c`.
-- No source-disc, CD/full-motion media, or target hardware evidence is
-  available yet. No stock target or true zero-output-device test was run.
+- No original source-disc or CD/full-motion media evidence is available yet.
+  Physical Windows 98 and XP hardware validation is still pending; the
+  passing target and true zero-output-device tests above are QEMU runs.
 - The kit is for local testing. Review Open Watcom runtime redistribution
   requirements before publishing a binary; no binaries are tracked.
 
 ## Next milestone
 
 Run the [target checklist](probe/TEST.TXT) with the same checksummed kit
-on stock 98 FE/SE and x86 XP RTM/SP3, including a real zero-output-device
-configuration. Start with 98 FE to check the CRT's wide imports and loader
-behavior before claiming the toolchain is qualified. Independent milestone
-2 ILBM decoding work can proceed without the target PCs.
+next on x86 XP SP3, which is untested. Obtain physical Windows 98 and XP
+results before claiming native hardware validation. Independent milestone
+2 ILBM decoding work can proceed while those results are pending.

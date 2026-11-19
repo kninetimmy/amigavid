@@ -25,8 +25,30 @@ requirements and acceptance evidence.
 
 ## Current focus
 
-The project is in early setup. The next step is pinned archive verification
-and a source inventory.
+The archive baseline is documented. The next implementation milestone is the
+Open Watcom Win32 compatibility probe; no probe has been built or run.
+
+## Archive inventory
+
+The original archive is a local reference input, not repository content.
+Download [`vc.zip`](https://archive.org/download/vc_20221206/vc.zip) from the
+pinned source in the PRD, place it at the ignored path `inputs/vc.zip`, then
+run:
+
+```text
+python tools/inventory.py
+```
+
+The standard-library-only command verifies SHA-256
+`ef4622f337e4e6331fdc97d5da6ec54d35f0d39bcd28ab898ce3689b8fb36ee3` before it
+reads ZIP metadata. It never extracts or executes archive members, and its
+source and asset listing is deterministic. A missing archive or checksum
+mismatch exits nonzero with a diagnostic on stderr and produces no inventory.
+The script also accepts a local ZIP path as its only argument when the archive
+cannot be placed under `inputs/`.
+
+See [the archive baseline](docs/BASELINE.md) for the input map, retained
+reference material, blockers, attribution, and target-status matrix.
 
 ## First useful demo and release acceptance
 

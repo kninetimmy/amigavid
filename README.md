@@ -25,8 +25,52 @@ requirements and acceptance evidence.
 
 ## Current focus
 
-The archive baseline is documented. The next implementation milestone is the
-Open Watcom Win32 compatibility probe; no probe has been built or run.
+Before milestone 1, the archive baseline was documented but no probe had
+been built or run. Now the Open Watcom Win32 probe has a repeatable build
+and a modern-host smoke test. Windows 98 and XP qualification is pending.
+
+## Build and test the Win32 probe
+
+From a clean checkout on modern x64 Windows with Python 3.13 or later, run
+these commands in order from the repository root:
+
+```powershell
+python tools/probe.py bootstrap
+python tools/probe.py build
+python tools/probe.py inspect
+python tools/probe.py package
+python tools/probe.py smoke
+```
+
+Only `bootstrap` needs the network on a clean checkout. It downloads the
+[dated Open Watcom v2 C release](https://github.com/open-watcom/open-watcom-v2/releases/tag/2026-11-01-Build)
+Windows x64 host asset (ID `697737741`, 128,145,854 bytes) and checks its
+official SHA-256, `d4e496c593ef2acbc54d1eaeb31b31d9c62f86e39a09e61ada411ef34feaa01a`.
+A mismatched download or cached file is rejected. The build rechecks the
+cache before extracting tools to a temporary checkout-local folder. It
+does not run the installer, make a global installation or change your
+environment. No original archive or assets are needed.
+
+The host compiles with `wcc386 -bt=nt -bg -3r` and links with `wlink` using
+`system nt_win`, the ANSI `WinMain` startup and GUI subsystem version 4.0.
+The build normalizes the unsigned executable's COFF timestamp, and ZIP
+entries have fixed timestamps. `.probe/build/PE-IMPORTS.txt` lists the PE
+headers, imports and build provenance; `probe.map` and `probe.lst` in that
+same folder show the linker inputs and application-object disassembly.
+
+On an interactive, unlocked host desktop, `smoke` runs the extracted
+32-bit executable from a directory with spaces with a different working
+directory. It samples the painted DIB, posts mouse and keyboard window
+messages, checks the actual WinMM count and simulated no-audio status,
+and checks clean exits and missing/malformed-file dialogs. See
+`.probe/HOST-SMOKE.txt` for the observed results.
+
+Verify `.probe/VCPROBE.ZIP` against `.probe/VCPROBE.ZIP.sha256` on the
+modern host. On each target, follow the included [TEST.TXT](probe/TEST.TXT):
+extract to a folder with spaces, then launch offline from Explorer or a
+Windows `COMMAND.COM` session. The kit includes no target-side developer
+tools and requires no separately installed CRT. This is a local test kit,
+not the editor or a release. See [PROGRESS.md](PROGRESS.md) for results.
 
 ## Archive inventory
 

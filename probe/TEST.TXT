@@ -1,0 +1,41 @@
+AmigaVid Win32 toolchain probe (candidate, not a Video Creator release)
+
+Before copying to a target PC, verify VCPROBE.ZIP on your modern host:
+  Get-FileHash .\VCPROBE.ZIP -Algorithm SHA256
+Compare that digest with VCPROBE.ZIP.sha256. Extract all three files
+into a writable folder with a space, for example C:\Probe Test.
+Use a ZIP extractor already available on the target, or extract on
+the host and copy all three files together. Turn networking off.
+
+1. Double-click VCPROBE.EXE in Explorer. In a Windows (not pure DOS)
+   COMMAND.COM prompt, you can also launch by name from its directory:
+       C:
+       CD "C:\Probe Test"
+       VCPROBE.EXE
+   If your shell does not accept the long folder name, use DIR to find
+   its DOS short name and CD to that alias instead.
+2. Expect red and green upper quadrants, blue and red lower quadrants,
+   separated by a white cross, and "Ready" in the title. Cover/uncover
+   the window and check repaint. Click inside it, then press Space:
+   the title should change to "Mouse", then "Space".
+3. Record the actual WinMM wave output count from the title. If there is
+   no output device, expect "No audio (WinMM waveOut=0)". No sound plays;
+   the probe only counts devices. Press Esc to close. Relaunch and use X.
+   Optional: VCPROBE.EXE /noaudio labels a simulated no-audio display
+   and still shows the actual WinMM count; it is not a zero-device test.
+4. With the probe closed, rename VCPROBE.DAT to SAVED.DAT and launch.
+   Expect "Missing VCPROBE.DAT". Create an empty VCPROBE.DAT (e.g.
+   TYPE NUL > VCPROBE.DAT from COMMAND.COM) and relaunch. Expect
+   "Invalid VCPROBE.DAT". Remove the empty file and restore SAVED.DAT
+   to VCPROBE.DAT. Launch again to confirm recovery.
+
+Record the ZIP SHA-256, OS edition/build/service pack, CPU, RAM,
+graphics mode, audio hardware and reported count, optical hardware,
+and what passed/failed, including the exact text of any loader error.
+Save a screenshot if possible. Test on a stock OS without adding a C
+runtime or developer tools. Record whether this was real hardware or a VM.
+
+The executable links the Open Watcom C runtime governed by the Sybase
+Open Watcom Public License 1.0. Runtime source and license:
+https://github.com/open-watcom/open-watcom-v2/tree/2026-11-01-Build
+Local compatibility test kit; do not treat it as a public release.

@@ -30,9 +30,11 @@ smoke test. The unchanged kit also passes on all four QEMU guest targets:
 Windows 98 FE (4.10.1998), 98 SE (4.10.2222), x86 XP RTM
 (2600.xpclient.010817-1148), and x86 XP Professional SP3
 (2600.xpsp.080413-2111). Physical-hardware and editor-release validation
-remain open. Milestone 2 real-asset ILBM decoding is the next independent
-development step. See the
-[live progress matrix](PROGRESS.md#runtime-evidence) for results and limits.
+remain open. Before milestone 2, the next independent step was to decode
+and display actual ILBM artwork. The viewer now passes its fixture tests
+and Windows 11 smoke test; it has not run on Windows 98 or XP. See the
+[probe matrix](PROGRESS.md#runtime-evidence) and
+[viewer evidence](PROGRESS.md#milestone-2--real-asset-ilbm-viewer).
 
 ## Build and test the Win32 probe
 
@@ -102,6 +104,62 @@ See [the historical milestone 0 archive baseline](docs/BASELINE.md) for the
 input map, retained reference material, blockers, attribution, and pre-probe
 target-status matrix. Its pending rows are historical; use the
 [live progress matrix](PROGRESS.md#runtime-evidence) for current status.
+
+## Build and test the ILBM viewer
+
+On modern x64 Windows with Python 3.13+, run from the repository root. Put
+the pinned ZIP described above at `inputs/vc.zip`. For `test`, have a host
+GCC or Clang on `PATH` (`CC` can name the compiler executable). For `smoke`,
+use an NTFS checkout and an unlocked desktop at 100% scale. Leave the
+viewer visible and unobscured.
+
+```powershell
+python tools/probe.py bootstrap
+python tools/asset.py prepare
+python tools/asset.py build
+python tools/asset.py test
+python tools/asset.py smoke
+```
+
+`prepare` optionally takes a local ZIP path. It verifies the pinned ZIP
+and copies only `vc/data/blankeditor.iff` and
+`vc/vcpics/jolyons/artimages/blueface.16` to `inputs/Viewer Assets/`.
+`tools/inventory.py` still only lists metadata; `prepare` is the separate
+command that extracts the two files. `build` needs the same verified
+Watcom cache as the probe but no artwork. `test` feeds the two fixtures and
+small generated cases to the portable C decoder linked into the GUI; it
+checks exact top-down RGB24 size and digests. `smoke` logs actual window
+pixels, repaint, dialogs, recovery and path-rejection results to
+`.asset/HOST-SMOKE.txt`, and writes two native-window BMPs to `.asset/`.
+Keep the original assets, BMPs and executables local; do not commit or
+publish them.
+
+Run the viewer manually from any working directory with an explicit asset
+root. For example, from the checkout:
+
+```powershell
+$root = (Resolve-Path '.\inputs\Viewer Assets').Path
+& (Resolve-Path '.\.asset\VCASSET.EXE').Path $root
+```
+
+The background opens first. Use **File → Background** and **File →
+Picture** to switch or retry after an error. The viewer paints at 1:1 at
+the upper left of the client area; it is not the editor. Both menu choices
+take the same path: their fixed leaf names are resolved only under the
+selected absolute local drive folder, never under the working directory.
+This restriction applies to both names, not just `blueface.16`. Relative,
+parent-traversing, UNC and device paths are not accepted. On NT the viewer
+still rejects reparse points (including junctions), multiply-linked files
+and non-regular files. Previously it checked each directory but used
+absolute paths for later opens. Now it opens the directly mapped local
+volume's root once per read and opens each subsequent name relative to
+its checked parent handle. It refuses directory aliases (such as `SUBST`)
+and does not fall back to absolute paths if safe resolution fails.
+On 9x it still requires a local FAT/FAT32 drive and opens by absolute
+path. Use ANSI-representable paths within `MAX_PATH`. The decoder handles
+indexed 1–8 plane ILBM with raw or ByteRun1 rows (up to 1024×1024 and
+4 MiB input); HAM, Extra Half-Brite, masks and other formats are not
+supported here.
 
 ## First useful demo and release acceptance
 

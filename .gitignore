@@ -1,5 +1,6 @@
 /inputs/
 /.probe/
+/.asset/
 /tools/__pycache__/
 .memhub/
 agent_docs/PROJECT.md

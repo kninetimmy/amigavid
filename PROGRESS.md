@@ -127,6 +127,59 @@ validation. The Windows 11 `/noaudio` check above remains simulated.
 | `.probe/build/VCPROBE.DAT` | `cc41816184f41d388d76455fca98f88c48137c850ec073c153d231186bb40fe4` |
 | `.probe/build/PE-IMPORTS.txt` | `3c7cc60661e27fa583dad64e0250940efde5b0b8ca78aadfb6060552243e797b` |
 
+## Milestone 2 — real-asset ILBM viewer
+
+- **Host decode pass:** both original fixtures decoded as 320×256
+  top-down RGB24, 245,760 bytes apiece, with the independent FFmpeg hashes
+  below. The numeric `.16` extension does not change how the decoder
+  identifies the format. `blueface.16` counts one final zero alignment byte
+  in its compressed BODY; the decoder accepts it only after all plane rows.
+  Generated cases cover raw and compressed word-padded rows, plane order,
+  literal/repeat/no-op handling, truncation, row overruns, excess BODY data,
+  oversized dimensions and an invalid palette index.
+- **Viewer build:** the pinned Open Watcom v2 `2026-11-01-Build` produced
+  x86 PE32 GUI, OS/subsystem 4.0, static `WinMain` startup, and direct
+  GDI32, KERNEL32 and USER32 imports (no WinMM, CRT DLL or delay imports).
+  `VCASSET.EXE` SHA-256:
+  `63b43f6cab2d51d50494e5f427f5293a3dcc420c8ea52d05eb0f3ea8984464b7`.
+  `.asset/PE-IMPORTS.txt` and `.asset/viewer.map` are local build evidence.
+- **Viewer host smoke pass:** Windows 11 Pro x64 build 26300.9974. The
+  viewer opened and switched images from a root with spaces and a
+  different working directory. Five painted client pixels per image and
+  the full 320×256 client crop in each native-window screenshot matched
+  the FFmpeg reference. Invalidating the blacked-out client area restored
+  the sampled pixels. Missing and corrupt opens showed filename-specific
+  dialogs; repaint kept the current picture, and the next valid open worked
+  in the same window. The smoke also rejected parent traversal, an ancestor
+  junction, a leaf junction and a multiply-linked file.
+  `.asset/HOST-SMOKE.txt`, `background.bmp`, and `picture.bmp` are local
+  output under `.asset/`, not release assets.
+
+| Fixture | Top-down RGB24 SHA-256 |
+| --- | --- |
+| `blankeditor.iff` | `268d851d1941790a3019c94c3a3b8319259246680808b969b8d768923fa3b9bf` |
+| `blueface.16` | `622a27248ed4f36102cd514712c0e1a83667cb114b1afa9c153b33cced55e585` |
+
+**Outstanding viewer checks:** Windows 98 FE, 98 SE, x86 XP RTM and x86 XP
+SP3 have not run this viewer; the four guest passes above are probe results
+only. Check the viewer loader/imports, FAT path branch, native display on
+legacy color modes, and both open/repaint/recovery workflows on the targets.
+Physical hardware and the full editor workflow also remain unverified.
+
+### Before/after inventory
+
+| Element | Before → after |
+| --- | --- |
+| `README.md` | Probe, archive and release instructions still apply. The formerly pending real-asset development step now has viewer instructions and host evidence. |
+| `PROGRESS.md` | Archive baseline and four probe passes still apply, with the same limits. The viewer has its own results and pending target checks. |
+| `.gitignore` | Existing local roots still ignored; `.asset/` is now ignored too. |
+| `asset/ilbm.h`, `asset/ilbm.c` | No portable decoder → bounded indexed ILBM to top-down RGB24 with a matching release function. |
+| `asset/viewer.c` | No real-asset window → Win32 viewer with two fixed menu choices. This shared root restriction covers **both** leaf names; raw/ByteRun1 and parser limits likewise apply to both. |
+| `asset/decode_test.c` | No host decoder driver → native CLI exercising the GUI's decoder. |
+| `tools/asset.py` | No viewer workflow → local fixture preparation, build, tests and smoke commands. Reuses the probe's pin/extraction and PE checks without changing them. |
+| `tools/asset_smoke.py` | No viewer smoke harness → actual window tests with local-only captures and a log. |
+| `probe/probe.c`, `probe/TEST.TXT`, `tools/probe.py`, `tools/probe_smoke.py`, `tools/inventory.py` | Unchanged tools and probe kit. The probe still uses its original executable-relative synthetic DAT; viewer root selection is separate. The archive inventory still does no extraction. |
+
 ## Open blockers
 
 - `DT_STUFF.S`, vector tables/media, demo video media, and font resources are
@@ -141,7 +194,9 @@ validation. The Windows 11 `/noaudio` check above remains simulated.
 
 ## Next milestone
 
-Milestone 2 real-asset ILBM decoding and display is the next independent
-development step. Obtain physical Windows 98 and XP
-[target-checklist](probe/TEST.TXT) results before claiming native hardware
-validation. Editor-release workflows remain unverified.
+Before this viewer, milestone 2 real-asset ILBM decoding and display was
+the next independent development step. It now has host evidence; run the
+viewer checks above on Windows 98 and XP. Milestone 3 is to edit, save,
+reopen and replay one sequence. Obtain physical Windows 98 and XP
+[probe target-checklist](probe/TEST.TXT) results before claiming native
+hardware validation. Editor-release workflows remain unverified.

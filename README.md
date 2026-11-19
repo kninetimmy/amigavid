@@ -26,10 +26,12 @@ requirements and acceptance evidence.
 ## Current focus
 
 The Open Watcom Win32 probe has a repeatable build and a Windows 11 host
-smoke test. The unchanged kit also passes under QEMU on Windows 98 FE
-(4.10.1998), 98 SE (4.10.2222), and x86 XP RTM
-(2600.xpclient.010817-1148). x86 XP SP3 is the next untested probe target;
-physical-hardware validation remains open. See the
+smoke test. The unchanged kit also passes on all four QEMU guest targets:
+Windows 98 FE (4.10.1998), 98 SE (4.10.2222), x86 XP RTM
+(2600.xpclient.010817-1148), and x86 XP Professional SP3
+(2600.xpsp.080413-2111). Physical-hardware and editor-release validation
+remain open. Milestone 2 real-asset ILBM decoding is the next independent
+development step. See the
 [live progress matrix](PROGRESS.md#runtime-evidence) for results and limits.
 
 ## Build and test the Win32 probe
@@ -103,9 +105,9 @@ target-status matrix. Its pending rows are historical; use the
 
 ## First useful demo and release acceptance
 
-The first useful demo opens real editor artwork on Windows 98, adds two
-pictures and a timed transition, saves the project, and plays that file on XP
-with the same executable.
+The PRD's first useful demo goal is to open real editor artwork on Windows
+98, add two pictures and a timed transition, save the project, and play that
+file on XP with the same executable.
 
 Release acceptance is stricter: the same portable ZIP must pass the edit,
 save, reopen and playback workflow on both Windows families. A modern-host

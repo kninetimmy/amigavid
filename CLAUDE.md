@@ -18,7 +18,7 @@ config: .memhub/config.toml
 
 - Start with the pinned archive and source inventory, then qualify the Open Watcom v2 toolchain using the Win32 compatibility probe. Keep core logic in portable C and platform code at the Win32 boundary.
 - Keep original input archives and extracted reference files under ignored `inputs/`. Verify the pinned archive hash and audit attribution and third-party redistribution rights before publishing any original code or assets.
-- No build, test, or run commands exist yet. Document proven commands in `README.md` and record milestone, test evidence, blockers, and the next action in `PROGRESS.md` once implementation starts. A modern-host smoke test does not qualify Windows 98 or XP.
+- Before milestone 1, no build, test, or run commands existed. The Win32 probe now has proven commands in `README.md`; keep it current and record milestone, test evidence, blockers, and the next action in `PROGRESS.md`. A modern-host smoke test does not qualify Windows 98 or XP.
 
 ## Orch
 

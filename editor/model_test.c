@@ -23,7 +23,7 @@ static void placement_checks(void)
             slide.tick = 50;
             assert(vc_place(&project, 1, &slide));
             assert(vc_length(&slide) == (a == 1 ? 2 : 129));
-            before = project;
+            memcpy(&before, &project, sizeof(before));
             invalid = slide;
             invalid.a = 0;
             assert(!vc_place(&project, 1, &invalid));

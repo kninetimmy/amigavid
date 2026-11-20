@@ -4,13 +4,57 @@
 
 - Historical baseline: [docs/BASELINE.md](docs/BASELINE.md); its pre-probe
   compatibility matrix is not the current target status.
-- Local reference input verified: `vc.zip` is 21,193,157 bytes with SHA-256
+- Pinned source ZIP: [`vc.zip`](https://archive.org/download/vc_20221206/vc.zip)
+  from Archive.org item [`vc_20221206`](https://archive.org/details/vc_20221206)
+  is 21,193,157 bytes with SHA-256
   `ef4622f337e4e6331fdc97d5da6ec54d35f0d39bcd28ab898ce3689b8fb36ee3`.
   Its ZIP CRC check found no bad member; the central directory has 1,225 files
   and 38 directory records.
 - `python tools/inventory.py` verifies the pin before listing the archive
   without extraction. The archive remains under ignored `inputs/`; no original
   source, assets, or binaries are tracked here.
+
+### Recovered and missing files
+
+**European retail disc — inspected 2026-11-20:** Archive.org item
+[`commodore_amiga_cd32`](https://archive.org/details/commodore_amiga_cd32),
+package `Video Creator (Europe).zip`, SHA-256
+`95943f5c817482548b8186b46edca45f76b28a12c287117303d1efabf991f13f`.
+Its SHA-1 matched the item metadata
+(`c5a99369895256aa0dc412b2b08cfa106ab514e5`), and the ZIP CRC check passed.
+This is a separate retail reference input, not the pinned developer source ZIP.
+
+Recovered retail content:
+
+- **13 `.vid` projects with VC10 headers**, including `1_demovideo.vid`
+  (3,037 bytes). `MPEG_Example.vid` is a VC10 project, not a full-motion stream.
+  Header recognition does not establish reader compatibility or playback.
+- **Three font descriptors and their bitmap strikes:** `VCSansSerif.font`
+  with `VCSansSerif/25`, `VCThin.font` with `VCThin/12`, and
+  `VideoCreator.font` with `VideoCreator/12`.
+- **Vector filename coverage: 30/30 retail-disc catalog entries; 41/44
+  source-ZIP catalog entries.** This comparison is case-insensitive filename
+  only, not path matching, byte identity, format validation or rendering evidence.
+
+Seven original files remain missing from the inspected source ZIP and retail disc:
+
+- Datatype helper source: `DT_STUFF.S` (the source ZIP has `dt_stuff.o` only).
+- Developer tables/include: `vc:vectors/TEST`, `SineTable.bin`,
+  `vc:vectors/Macros.i`.
+- Source-catalog VecAnims: `dancer2.vec`, `dancer5.vec`, `dancer7.vec`.
+
+The retail image has **Track 01 MODE1/2352 data** and **Track 02 AUDIO**.
+These are retail runtime media, not a developer source disc or evidence of
+CD transport, optional MPEG-device behavior or full-motion playback.
+Original-reader loading/playback of recovered projects and acceptance of
+Windows-written projects still need reference runs. Font metrics and vector
+format/rendering fidelity also need verification; locating files alone does
+not close those checks.
+
+All original inputs remain local under ignored `inputs/`; none is published
+here. Recovery does not grant redistribution rights. The
+[missing-file notice](README.md#have-a-video-creator-disk-or-backup) explains
+how to report a lead without uploading anything.
 
 ## Milestone 1 — Open Watcom Win32 probe
 
@@ -1122,11 +1166,14 @@ the refusal; probe, archive, viewer and release instructions still apply.
 
 ## Open blockers
 
-- `DT_STUFF.S`, vector tables/media, demo video media, and font resources are
-  absent from the archive.
+- The [seven missing files](#recovered-and-missing-files) still need locating;
+  recovered retail projects, fonts and vector filenames do not resolve the
+  missing developer source/tables or the separate reader/fidelity checks.
 - Bundled third-party code and media need separate redistribution review,
-  including the Commodore-Amiga notice in `vc/modules/screen.c`.
-- No original source-disc or CD/full-motion media evidence is available yet.
+  including recovered retail content and the Commodore-Amiga notice in
+  `vc/modules/screen.c`.
+- Retail data/audio tracks are inventoried above, but developer source-disc,
+  CD-transport/device behavior and full-motion playback evidence remain open.
   Physical Windows 98 and XP hardware validation is still pending; the
   passing target and true zero-output-device tests above are QEMU runs.
 - The kit is for local testing. Review Open Watcom runtime redistribution

@@ -1062,6 +1062,34 @@ the refusal; probe, archive, viewer and release instructions still apply.
   physical-hardware test or original-reader qualification was added.
   The next-batch candidate remains Scroll/Reveal, subject to separate approval.
 
+### Timed Play retry diagnostics — issue #30
+
+- Exhausted timed Play sampling now reports the target tick and the three
+  observed stop ticks in attempt order on stderr; `None` identifies an
+  attempt with no observed stop. Both native sampling call sites use the
+  same retry check. A wrong frame at the target still fails immediately;
+  a skip followed by a correct frame keeps its retry entry in the smoke log.
+- Local `python -m unittest discover -s tools -p test_play_capture.py`
+  **passed (3 tests, exit 0)**, not run by CI. Controlled stops at 11/12/13
+  targeting tick 10 verify the smoke command's failure diagnostic and exit
+  status; a wrong frame at 10 verifies no retry, and 11 then 10 verifies
+  successful recovery with the skip retained. No host timing/load is used.
+- `python tools/probe.py bootstrap` and `python tools/editor.py build`
+  **passed (exit 0)** using the existing SHA-256-verified Watcom cache.
+  Smoke fixtures were prepared from the pinned local archive.
+  The rebuilt executable is unchanged:
+  `d8a5240a5f0498b3ccb40a352a8217eceae29b49c201a7faf9de483146091a6d`.
+- `python tools/editor.py smoke` **passed (exit 0)** locally, not in CI,
+  on Windows 11 x64 build 26300 with Python 3.14.4. All 24 first-slide and
+  24 Cut-then-slide cases passed, along with existing artwork, metadata,
+  timeline, containment and save/recovery checks. No timed sample needed
+  a retry in this run. Local evidence: `.editor/ISSUE30-unit.txt`,
+  `ISSUE30-build.txt`, `ISSUE30-smoke.txt` and `.editor/HOST-SMOKE.txt`.
+- The full README was reviewed and remains accurate without changes,
+  including setup, controls, save protection and host/guest limits.
+  No editor runtime, Windows 98/XP qualification or next-batch scope changed;
+  original inputs and generated artifacts remain private and ignored.
+
 ## Open blockers
 
 - `DT_STUFF.S`, vector tables/media, demo video media, and font resources are

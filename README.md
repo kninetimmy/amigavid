@@ -30,8 +30,9 @@ artwork, milestone 3 delivered `VCEDIT.EXE`: a small native editor that
 loads two pictures, places a Straight Cut and a timed Slide On Up, and
 saves, reopens and replays the sequence.
 
-The first milestone 4 batch adds **Slide On Down**, **Slide Off Up** and
-**Slide Off Down**, preserving their original VC10 IDs (3, 4 and 5).
+Milestone 4 adds **Slide On Down**, **Slide Off Up** and **Slide Off Down**
+(VC10 IDs 3–5), followed by **Scroll Up**, **Scroll Down**, **Reveal Up**
+and **Reveal Down** (IDs 6–9).
 These additions have Windows 11 host checks, not guest qualification.
 
 **The first useful workflow has been demonstrated in QEMU:** on Windows
@@ -43,9 +44,9 @@ output, accounting for the measured 98 display-color conversion.
 See the [milestone 3 evidence](PROGRESS.md#guest-verification).
 
 That guest-tested build predates the later timeline selection and drag
-fixes and the additional slides, which have been checked on Windows 11 only.
+fixes and the additional effects, which have been checked on Windows 11 only.
 The screenshot below shows the timeline-fixed editor before the additional
-slide controls, on that development host, not a 98 or XP run.
+effect controls, on that development host, not a 98 or XP run.
 Physical Windows 98/XP hardware, original Amiga-reader compatibility and
 full editor-release qualification remain unverified.
 
@@ -263,9 +264,10 @@ pictures to that folder first. It must be on local FAT on Windows 98.
 1. Enter the first picture's filename, then **Open picture** (Ctrl+I).
    Choose **Add Straight Cut**. Open the second picture and choose
    **Add Slide On Up**, **Add Slide On Down**, **Add Slide Off Up** or
-   **Add Slide Off Down**. The screen list selects the target for the next cue;
-   **Ticks** sets the slide duration parameter (1–255, default 25), in 25ths
-   of a second.
+   **Add Slide Off Down**, or choose **Add Scroll Up**, **Add Scroll Down**,
+   **Add Reveal Up** or **Add Reveal Down**. The screen list selects the target
+   for the next cue; **Ticks** sets the transition duration parameter
+   (1–255, default 25), in 25ths of a second.
 2. Drag the second cue's marker horizontally to a new start tick. Cues
    are kept in time order; a drop that would overlap is refused. **Play**
    (F5) starts from tick 0, **Stop** (Esc) holds the frame, and **Seek**
@@ -303,14 +305,16 @@ displays a frame is palette-realized when its colors fit a single logical
 palette; exactness on 8-bit hardware depends on the available entries.
 
 Slide On moves the incoming picture over the outgoing one; Slide Off moves
-the outgoing picture away to reveal the target. Source integer rounding
-can settle a slide before its timeline marker ends. The original one-tick
-**Slide Off Down** skips its screen swap and leaves the outgoing picture;
-the port preserves that quirk. Seek and Play use the same logical
+the outgoing picture away to reveal the target. Scroll moves both pictures
+in the chosen direction; Reveal moves the boundary over stationary pictures.
+Source integer rounding can settle a transition before its timeline marker
+ends. The original one-tick **Slide Off Down**, **Scroll Down** and **Reveal
+Down** skip their screen swap and leave the outgoing picture (black for a
+first cue); the port preserves that quirk. Seek and Play use the same logical
 two-field-per-tick picture rows, not Amiga copper buffering or display tricks.
 
 The editor preserves active VC10 screen order, paired references, author,
-track number, and all five supported effects' IDs, timing, parameters and text.
+track number, and all nine supported effects' IDs, timing, parameters and text.
 It previews the first member of a pair only; Psycho Flicker and CD audio are not
 implemented. Other effect IDs, special screen IDs, object tables and
 malformed files are refused without replacing the open document. To replace a

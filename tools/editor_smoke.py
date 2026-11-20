@@ -43,7 +43,7 @@ def row_card(second):
 def slide_pixels(effect, duration, elapsed, moved, first, second):
     # fx.c Func/End and videocreator.asm buildscreen's SkipLines. These slices
     # are independent of the port's vc_frame representation and painted output.
-    if elapsed < 0 or (effect == 5 and duration == 1):
+    if elapsed < 0 or (effect in (5, 7, 9) and duration == 1):
         return first
     if moved is None:
         return second
@@ -53,7 +53,17 @@ def slide_pixels(effect, duration, elapsed, moved, first, second):
         return second[(256 - moved) * 960:] + first[moved * 960:]
     if effect == 4:
         return first[(moved + 1) * 960:] + second[(255 - moved) * 960:]
-    return second[:moved * 960] + first[:(256 - moved) * 960]
+    if effect == 5:
+        return second[:moved * 960] + first[:(256 - moved) * 960]
+    if effect == 6:
+        return first[(moved + 1) * 960:] + second[:(moved + 1) * 960]
+    if effect == 7:
+        return second[(256 - moved) * 960:] + first[:(256 - moved) * 960]
+    if effect == 8:
+        return first[:(255 - moved) * 960] + second[(255 - moved) * 960:]
+    if effect == 9:
+        return second[:moved * 960] + first[moved * 960:]
+    raise ValueError(f"no source pixel expectation for effect {effect}")
 
 
 def shared_markers(cues):
@@ -245,7 +255,7 @@ def exercise(exe, digest, work, out):
                 return int(control_text(hwnd, 111))
             time.sleep(.001)
 
-    def click_track(hwnd, x, y=320):
+    def click_track(hwnd, x, y=374):
         for msg, wp in ((0x0201, 1), (0x0202, 0)):
             checked(send(hwnd, msg, wp, x | (y << 16), 2, 1000, None))
 
@@ -255,7 +265,7 @@ def exercise(exe, digest, work, out):
                 find_child(hwnd, None, "STATIC", f"Selected cue at tick {tick}."),
                 f"{context}: expected selected cue at tick {tick}, got tick field {actual!r}")
 
-    def drag_track(hwnd, start, end, y=320):
+    def drag_track(hwnd, start, end, y=374):
         for msg, wp, x in ((0x0201, 1, start), (0x0200, 1, end), (0x0202, 0, end)):
             checked(send(hwnd, msg, wp, x | (y << 16), 2, 1000, None))
 
@@ -282,45 +292,52 @@ def exercise(exe, digest, work, out):
     cards = [row_card(second) for second in (False, True)]
     for name, (data, _) in zip(("ROWSA.IFF", "ROWSB.IFF"), cards):
         (work / name).write_bytes(data)
-    for effect, button in ((2, 104), (3, 112), (4, 113), (5, 114)):
+    transitions = ((2, 104, "Slide On Up"), (3, 112, "Slide On Down"),
+                   (4, 113, "Slide Off Up"), (5, 114, "Slide Off Down"),
+                   (6, 115, "Scroll Up"), (7, 116, "Scroll Down"),
+                   (8, 117, "Reveal Up"), (9, 118, "Reveal Down"))
+    for effect, button, label in transitions:
         for duration, samples in FIRST_SLIDE_SAMPLES.items():
-            print(f"CHECK first slide ID {effect}, a={duration}, start=0", flush=True)
-            expected_bytes = authored("ROWSA.IFF", "ROWSB.IFF", 0, duration, effect, cut=False)
-            saved = work / f"first-{effect}-{duration}.vid"
-            checks_first = {
-                sampled: sha(slide_pixels(effect, duration, sampled, moved,
-                                          bytes(320 * 256 * 3), cards[1][1]))
-                for sampled, moved in samples
-            }
-            with launch() as (proc, hwnd):
-                open_file(hwnd, "ROWSA.IFF", 100)
-                open_file(hwnd, "ROWSB.IFF", 100)
-                edit(hwnd, 110, duration)
-                command(hwnd, button)
-                for sampled, expected in checks_first.items():
-                    capture(proc, hwnd, sampled, expected)
-                open_file(hwnd, saved.name, 102)
-                require(saved.read_bytes() == expected_bytes, "first slide authored fields differ")
-                quit_editor(proc, hwnd)
-            with launch() as (proc, hwnd):
-                open_file(hwnd, saved.name, 101)
-                for sampled, expected in reversed(tuple(checks_first.items())):
-                    capture(proc, hwnd, sampled, expected)
-                for sampled, expected in checks_first.items():
-                    play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
-                                 lambda: frame(hwnd), log)
-                command(hwnd, 105)
-                until(proc, lambda: find_child(hwnd, None, "STATIC", "Playback complete."),
-                      "first slide playback completion")
-                require(sha(frame(hwnd)) == next(reversed(checks_first.values())),
-                        "first slide final frame")
-                quit_editor(proc, hwnd)
-            log.append(f"PASS first slide ID {effect}, a={duration}, start=0: "
-                       f"author/save/restart/reopen, Seek and Play at ticks {tuple(checks_first)}, "
-                       "exact 81,920-pixel black/row-card comparisons and final frame.")
-    for effect, button, label in ((2, 104, "Slide On Up"), (3, 112, "Slide On Down"),
-                                 (4, 113, "Slide Off Up"), (5, 114, "Slide Off Down")):
+            for start in ((0, 1) if effect >= 6 else (0,)):
+                print(f"CHECK first {label}, a={duration}, start={start}", flush=True)
+                expected_bytes = authored("ROWSA.IFF", "ROWSB.IFF", start, duration, effect, cut=False)
+                saved = work / f"first-{effect}-{duration}-{start}.vid"
+                checks_first = {
+                    start + sampled: sha(slide_pixels(effect, duration, sampled, moved,
+                                                     bytes(320 * 256 * 3), cards[1][1]))
+                    for sampled, moved in (SLIDE_SAMPLES[duration] if start else samples)
+                }
+                with launch() as (proc, hwnd):
+                    open_file(hwnd, "ROWSA.IFF", 100)
+                    open_file(hwnd, "ROWSB.IFF", 100)
+                    edit(hwnd, 110, duration)
+                    command(hwnd, button)
+                    if start:
+                        drag(hwnd, 0, start, span=153 if duration == 255 else 124)
+                    for sampled, expected in checks_first.items():
+                        capture(proc, hwnd, sampled, expected)
+                    open_file(hwnd, saved.name, 102)
+                    require(saved.read_bytes() == expected_bytes, "first transition authored fields differ")
+                    quit_editor(proc, hwnd)
+                with launch() as (proc, hwnd):
+                    open_file(hwnd, saved.name, 101)
+                    for sampled, expected in reversed(tuple(checks_first.items())):
+                        capture(proc, hwnd, sampled, expected)
+                    for sampled, expected in checks_first.items():
+                        play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
+                                     lambda: frame(hwnd), log)
+                    command(hwnd, 105)
+                    until(proc, lambda: find_child(hwnd, None, "STATIC", "Playback complete."),
+                          "first transition playback completion")
+                    require(sha(frame(hwnd)) == next(reversed(checks_first.values())),
+                            "first transition final frame")
+                    quit_editor(proc, hwnd)
+                log.append(f"PASS first {label} ID {effect}, a={duration}, start={start}: "
+                           f"author/save/restart/reopen, Seek and Play at ticks {tuple(checks_first)}, "
+                           "exact 81,920-pixel black/row-card comparisons and final frame.")
+    for effect, button, label in transitions:
         for duration, samples in SLIDE_SAMPLES.items():
+            print(f"CHECK Cut then {label}, a={duration}", flush=True)
             expected_bytes = authored("ROWSA.IFF", "ROWSB.IFF", 25, duration, effect)
             saved = work / f"slide-{effect}-{duration}.vid"
             checks_slide = {
@@ -360,14 +377,14 @@ def exercise(exe, digest, work, out):
                     for invalid in (0, 256):
                         edit(hwnd, 110, invalid)
                         command(hwnd, button, modal=True)
-                        dialog(proc, "Slide duration of 1 to 255")
+                        dialog(proc, "effect duration of 1 to 255")
                         bad = expected_bytes.replace(
                             f"25\n{effect}\n7\n25\n".encode("ascii"),
                             f"25\n{effect}\n7\n{invalid}\n".encode("ascii"))
                         (work / "bad-slide.vid").write_bytes(bad)
                         open_file(hwnd, "bad-slide.vid", 101, modal=True)
                         dialog(proc, "Invalid or unsupported")
-                    for unsupported in (0, 6, 49, 900):
+                    for unsupported in (0, 10, 49, 900):
                         bad = expected_bytes.replace(f"25\n{effect}\n7\n".encode("ascii"),
                                                      f"25\n{unsupported}\n7\n".encode("ascii"))
                         (work / "bad-slide.vid").write_bytes(bad)
@@ -384,10 +401,30 @@ def exercise(exe, digest, work, out):
                 open_file(hwnd, roundtrip.name, 102)
                 require(roundtrip.read_bytes() == expected_bytes,
                         f"{label}, a={duration}: reopen/rejection changed fields")
+                if effect >= 6 and duration in (1, 25):
+                    # Independently reserved lengths from CalculateLength;
+                    # the following Slide is legally adjacent, with no gap.
+                    following_tick = 25 + (2 if duration == 1 else 22)
+                    following = expected_bytes.replace(b"\n0\n0\n0\n2\n", b"\n0\n0\n0\n3\n")
+                    following += f"{following_tick}\n2\n6\n19\n0\n0\n0\n0\n0\nNOTEXT\n".encode("ascii")
+                    (work / "following.vid").write_bytes(following)
+                    open_file(hwnd, "following.vid", 101)
+                    base = cards[0][1] if effect in (7, 9) and duration == 1 else cards[1][1]
+                    for elapsed, moved in SLIDE_SAMPLES[19]:
+                        sampled = following_tick + elapsed
+                        expected = sha(slide_pixels(2, 19, elapsed, moved, base, cards[0][1]))
+                        capture(proc, hwnd, sampled, expected)
+                        play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
+                                     lambda: frame(hwnd), log)
+                    adjacent = work / f"adjacent-{effect}-{duration}.vid"
+                    open_file(hwnd, adjacent.name, 102)
+                    require(adjacent.read_bytes() == following,
+                            f"{label}, a={duration}: adjacent cue fields changed")
                 quit_editor(proc, hwnd)
             log.append(f"PASS {label} ID {effect}, a={duration}: native author/save/restart/reopen, "
                        f"backward Seek and clock-paced Play at ticks {tuple(checks_slide)}, "
-                       "exact 81,920-pixel row-card comparisons, final frame and saved bytes.")
+                        "exact 81,920-pixel row-card comparisons, final frame and saved bytes; "
+                        "new IDs at a=1/25 also check an adjacent following Slide with Seek/Play.")
         metadata = FIXTURE.replace(b"50\n2\n7\n", f"50\n{effect}\n8\n".encode("ascii"))
         imported = work / f"metadata-{effect}.vid"
         imported.write_bytes(metadata)
@@ -439,14 +476,14 @@ def exercise(exe, digest, work, out):
         original = shared_markers(((10, 1), (11, 2), (12, 3), (44, 4), (4000, 5)))
         crowded.write_bytes(original)
         with launch() as (proc, hwnd):
-            for gesture, moves, end_y in (("vertical", (330,), 330),
-                                          ("vertical-return", (330, 320), 320),
-                                          ("vertical-release", (), 330)):
+            for gesture, moves, end_y in (("vertical", (384,), 384),
+                                          ("vertical-return", (384, 374), 374),
+                                          ("vertical-release", (), 384)):
                 open_file(hwnd, crowded.name, 101)
                 for tick in (10, 11):
                     click_track(hwnd, 17)
                     expect_cue(hwnd, tick, f"{gesture} setup")
-                checked(send(hwnd, 0x0201, 1, 17 | (320 << 16), 2, 1000, None))
+                checked(send(hwnd, 0x0201, 1, 17 | (374 << 16), 2, 1000, None))
                 for y in moves:
                     checked(send(hwnd, 0x0200, 1, 17 | (y << 16), 2, 1000, None))
                 checked(send(hwnd, 0x0202, 0, 17 | (end_y << 16), 2, 1000, None))
@@ -456,7 +493,7 @@ def exercise(exe, digest, work, out):
                 saved = work / f"{gesture}.vid"
                 open_file(hwnd, saved.name, 102)
                 require(saved.read_bytes() == original, f"{gesture} changed saved cue data")
-                log.append(f"PASS {gesture}: x17 press y320, moves {moves}, release y{end_y} retains cue 11 with matching tick/status; next stationary click cycles to 12; saved bytes unchanged.")
+                log.append(f"PASS {gesture}: x17 press y374, moves {moves}, release y{end_y} retains cue 11 with matching tick/status; next stationary click cycles to 12; saved bytes unchanged.")
             quit_editor(proc, hwnd)
 
         with launch() as (proc, hwnd):
@@ -466,12 +503,12 @@ def exercise(exe, digest, work, out):
                     click_track(hwnd, 17)
                     require(control_text(hwnd, 111) == str(tick), "selection before captured open")
                 edit(hwnd, 109, project.name)
-                checked(send(hwnd, 0x0201, 1, start | (320 << 16), 2, 1000, None))
+                checked(send(hwnd, 0x0201, 1, start | (374 << 16), 2, 1000, None))
                 # Ctrl+O dispatch while the mouse is held, without a button stealing capture.
                 checked(send(hwnd, 0x0111, 101 | (1 << 16), 0, 2, 3000, None))
                 require(find_child(hwnd, None, "STATIC", "Project opened."), "captured project open")
                 for msg, wp in ((0x0200, 1), (0x0202, 0)):
-                    checked(send(hwnd, msg, wp, end | (320 << 16), 2, 1000, None))
+                    checked(send(hwnd, msg, wp, end | (374 << 16), 2, 1000, None))
                 require(control_text(hwnd, 111) == "0" and
                         find_child(hwnd, None, "STATIC", "Project opened."),
                         "release after project replacement reused stale drag/selection")
@@ -500,8 +537,8 @@ def exercise(exe, digest, work, out):
             layout_file.write_bytes(layout_bytes)
             with launch() as (proc, hwnd):
                 open_file(hwnd, layout_file.name, 101)
-                for x, y, target in ((20, 320, 10), (22, 324, 44), (22, 325, 10),
-                                     (22, 317, 44), (22, 316, 10)):
+                for x, y, target in ((20, 374, 10), (22, 378, 44), (22, 379, 10),
+                                     (22, 371, 44), (22, 370, 10)):
                     click_track(hwnd, x, y)
                     expect_cue(hwnd, target, f"{layout} click at ({x}, {y})")
                 if 45 in ticks:
@@ -528,18 +565,18 @@ def exercise(exe, digest, work, out):
         long_marker.write_bytes(long_bytes)
         with launch() as (proc, hwnd):
             open_file(hwnd, long_marker.name, 101)
-            for x, y, tick in ((211, 324, 44), (190, 325, 39)):
+            for x, y, tick in ((211, 378, 44), (190, 379, 39)):
                 click_track(hwnd, x, y)
                 require(control_text(hwnd, 111) == str(tick) and
                         find_child(hwnd, None, "STATIC", "Timeline seek."),
                         f"long marker: ({x}, {y}) outside the body did not seek")
             for x in (210, 190):
-                click_track(hwnd, x, 324)
-                expect_cue(hwnd, 25, f"long marker at ({x}, 324)")
+                click_track(hwnd, x, 378)
+                expect_cue(hwnd, 25, f"long marker at ({x}, 378)")
             saved = work / "long-selection.vid"
             open_file(hwnd, saved.name, 102)
             require(saved.read_bytes() == long_bytes, "long marker click moved a cue")
-            drag_track(hwnd, 190, 235, y=324)
+            drag_track(hwnd, 190, 235, y=378)
             saved = work / "long-moved.vid"
             open_file(hwnd, saved.name, 102)
             # Preserve the 63-pixel grab offset: 235 - 63 = 172 maps to tick 35.
@@ -568,13 +605,13 @@ def exercise(exe, digest, work, out):
             require(selection.read_bytes() == original, "selection alone changed saved cue data")
             click_track(hwnd, 17)
             require(control_text(hwnd, 111) == "12", "saving lost the selected cue")
-            click_track(hwnd, 27, y=316)
+            click_track(hwnd, 27, y=370)
             require(control_text(hwnd, 111) == "44", "nearby marker's outer hit-area edge")
-            click_track(hwnd, 28, y=316)
+            click_track(hwnd, 28, y=370)
             require(control_text(hwnd, 111) == "88", "outside right hit area did not seek")
             require(find_child(hwnd, None, "STATIC", "Timeline seek."),
                     "empty-track seek left stale selected-tick status")
-            click_track(hwnd, 11, y=316)
+            click_track(hwnd, 11, y=370)
             require(control_text(hwnd, 111) == "0", "outside left hit area did not seek")
             click_track(hwnd, 22)
             expect_cue(hwnd, 44, "overlap selects the last-drawn marker")
@@ -661,7 +698,7 @@ def exercise(exe, digest, work, out):
             click_track(hwnd, 23)
             require(control_text(hwnd, 111) == "52", "right marker before equidistant hit")
             for tick in (10, 11, 12, 10):
-                click_track(hwnd, 20, y=316)  # No body hit: timeline order wins.
+                click_track(hwnd, 20, y=370)  # No body hit: timeline order wins.
                 expect_cue(hwnd, tick, "equidistant fallback order")
             saved = work / "tied-selection.vid"
             open_file(hwnd, saved.name, 102)

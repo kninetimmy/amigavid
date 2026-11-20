@@ -17,6 +17,10 @@
 #define VC_SLIDE_ON_DOWN 3
 #define VC_SLIDE_OFF_UP 4
 #define VC_SLIDE_OFF_DOWN 5
+#define VC_SCROLL_UP 6
+#define VC_SCROLL_DOWN 7
+#define VC_REVEAL_UP 8
+#define VC_REVEAL_DOWN 9
 
 struct vc_screen {
     char first[VC_NAME], second[VC_NAME];

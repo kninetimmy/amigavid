@@ -85,6 +85,7 @@ TILDE_FIXTURE = (FIXTURE.replace(b"WDQjdt;Xbsn!Bsu/jgg", b"WDQjdt;XBSN\x7f2/JGG"
 # Source-derived field samples, not output from vc_at. Each moving sample is
 # (tick since start, total rows stepped); None means End has already run.
 # CalculateParam + DoDisplay: steps 256, 86, 7, 6, 2 and 1 respectively.
+# Slides, Scroll and Reveal share these field samples and placement lengths.
 SLIDE_SAMPLES = {
     1: ((-1, 0), (0, None), (1, None)),
     2: ((-1, 0), (0, 172), (1, None), (2, None)),
@@ -141,7 +142,7 @@ def test():
             require(result.returncode == 0 and output.read_bytes() == TILDE_FIXTURE,
                     f"shifted '~' in WARM~1.IFF (ordinary and paired) and Star Light~: {result.stdout}")
         print("PASS active LF/CRLF fixture: shifted '~' in short-style picture name and effect text")
-        for effect in range(2, 6):
+        for effect in range(2, 10):
             for duration, samples in SLIDE_SAMPLES.items():
                 data = (TILDE_FIXTURE.replace(b"50\n2\n7\n19\n",
                                              f"50\n{effect}\n7\n{duration}\n".encode("ascii"))
@@ -149,11 +150,11 @@ def test():
                 for encoded in (data, data.replace(b"\n", b"\r\n")):
                     result = parse(encoded)
                     require(result.returncode == 0 and output.read_bytes() == data,
-                            f"slide {effect}, a={duration}: fields did not round-trip")
+                            f"transition {effect}, a={duration}: fields did not round-trip")
                     frames = {r[0]: r[1:] for r in
                               (tuple(map(int, ln.split())) for ln in result.stdout.splitlines())}
                     for elapsed, moved in samples:
-                        if elapsed < 0 or (effect == 5 and duration == 1):
+                        if elapsed < 0 or (effect in (5, 7, 9) and duration == 1):
                             expected = (6, 0, 256, 0, 0)
                         elif moved is None:
                             expected = (7, 0, 256, 0, 0)
@@ -163,18 +164,36 @@ def test():
                                 3: (7, 6, moved, 256 - moved, moved),
                                 4: (6, 7, 255 - moved, moved + 1, 255 - moved),
                                 5: (7, 6, moved, 0, 0),
+                                6: (6, 7, 255 - moved, moved + 1, 0),
+                                7: (7, 6, moved, 256 - moved, 0),
+                                8: (6, 7, 255 - moved, 0, 255 - moved),
+                                9: (7, 6, moved, 0, moved),
                             }[effect]
                         require(frames[50 + elapsed] == expected,
-                                f"slide {effect}, a={duration}, tick {50 + elapsed}: "
+                                f"transition {effect}, a={duration}, tick {50 + elapsed}: "
                                 f"{frames[50 + elapsed]} != {expected}")
+                    require(frames[400] == (8, 0, 256, 0, 0), "following Cut")
                 for invalid in (0, 256, 65535):
                     bad = data.replace(f"50\n{effect}\n7\n{duration}\n".encode("ascii"),
                                        f"50\n{effect}\n7\n{invalid}\n".encode("ascii"))
                     require(parse(bad).returncode == 1,
-                            f"slide {effect} accepted invalid duration {invalid}")
-        print("PASS all four slides: exact LF/CRLF fields and source row offsets at durations "
+                            f"transition {effect} accepted invalid duration {invalid}")
+                if effect >= 6:
+                    # A following transition starts with the held output, not
+                    # the prior target when a downward one-tick swap was skipped.
+                    following = data.replace(b"400\n1\n8\n0\n", b"400\n2\n8\n19\n")
+                    result = parse(following)
+                    require(result.returncode == 0, "following transition rejected")
+                    frames = {r[0]: r[1:] for r in
+                              (tuple(map(int, ln.split())) for ln in result.stdout.splitlines())}
+                    base = 6 if effect in (7, 9) and duration == 1 else 7
+                    require(frames[399] == (base, 0, 256, 0, 0) and
+                            frames[400] == (base, 8, 241, 0, 0) and
+                            frames[418] == (8, 0, 256, 0, 0),
+                            f"following transition after ID {effect}, a={duration}")
+        print("PASS slides/Scroll/Reveal IDs 2-9: exact LF/CRLF fields and source row offsets at durations "
               "1/2/19/25/65/255; invalid durations; atomic placement rejection and legal boundaries")
-        for effect in range(2, 6):
+        for effect in range(2, 10):
             for duration, samples in FIRST_SLIDE_SAMPLES.items():
                 # Remove the initial Cut: the outgoing picture is startup black.
                 data = (FIXTURE.replace(b"0\n0\n0\n3\n0\n1\n6\n0\n40\n30\n20\n10\n0\nNOTEXT\n",
@@ -187,12 +206,12 @@ def test():
                                            f"{start}\n{effect}\n7\n".encode("ascii"))
                     result = parse(encoded)
                     require(result.returncode == 0 and output.read_bytes() == encoded,
-                            f"first slide {effect}, a={duration}, start={start}: round-trip")
+                            f"first transition {effect}, a={duration}, start={start}: round-trip")
                     frames = {r[0]: r[1:] for r in
                               (tuple(map(int, ln.split())) for ln in result.stdout.splitlines())}
                     # A first cue at tick 1 is not delayed: Bodge2 is already done.
                     for elapsed, moved in (SLIDE_SAMPLES[duration] if start else samples):
-                        if elapsed < 0 or (effect == 5 and duration == 1):
+                        if elapsed < 0 or (effect in (5, 7, 9) and duration == 1):
                             expected = (0, 0, 256, 0, 0)
                         elif moved is None:
                             expected = (7, 0, 256, 0, 0)
@@ -202,12 +221,16 @@ def test():
                                 3: (7, 0, moved, 256 - moved, moved),
                                 4: (0, 7, 255 - moved, moved + 1, 255 - moved),
                                 5: (7, 0, moved, 0, 0),
+                                6: (0, 7, 255 - moved, moved + 1, 0),
+                                7: (7, 0, moved, 256 - moved, 0),
+                                8: (0, 7, 255 - moved, 0, 255 - moved),
+                                9: (7, 0, moved, 0, moved),
                             }[effect]
                         require(frames[start + elapsed] == expected,
-                                f"first slide {effect}, a={duration}, tick {start + elapsed}: "
+                                f"first transition {effect}, a={duration}, tick {start + elapsed}: "
                                 f"{frames[start + elapsed]} != {expected}")
                     require(frames[400] == (8, 0, 256, 0, 0), "startup shifted later Cut")
-        print("PASS first slides IDs 2-5: startup field exception at 1/2/19/25/65/255, "
+        print("PASS first transitions IDs 2-9: startup field exception at 1/2/19/25/65/255, "
               "no delay at tick 1, later Cut unchanged")
         rejects = [
             ("UTF-8 header", FIXTURE.replace(b"\xa9", b"\xc2\xa9")),
@@ -218,7 +241,7 @@ def test():
             ("oversized author", FIXTURE.replace(b"Fixture Author", b"A" * 150)),
             ("overflow", FIXTURE.replace(b"\n50\n", b"\n99999999999\n")),
             ("too many screens", FIXTURE.replace(b"\n7\n3\n", b"\n7\n95\n", 1)),
-            ("unsupported effect", FIXTURE.replace(b"50\n2\n7\n", b"50\n6\n7\n")),
+            ("unsupported effect", FIXTURE.replace(b"50\n2\n7\n", b"50\n10\n7\n")),
             ("special screen", FIXTURE.replace(b"50\n2\n7\n", b"50\n2\n1\n")),
             ("dangling screen ID", FIXTURE.replace(b"50\n2\n7\n", b"50\n2\n9\n")),
             ("unresolved pair", FIXTURE.replace(b"Tvc0dppm/27\n0\n", b"yz{\n0\n")),

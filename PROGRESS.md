@@ -1175,6 +1175,108 @@ the refusal; probe, archive, viewer and release instructions still apply.
   were copied or published. Scroll/Reveal remains the next candidate batch,
   subject to separate approval.
 
+## Milestone 4 batch 2 — Scroll and Reveal (issue #42)
+
+### Source and fidelity
+
+- Reverified primary `inputs/vc.zip` against SHA-256
+  `ef4622f337e4e6331fdc97d5da6ec54d35f0d39bcd28ab898ce3689b8fb36ee3`
+  before reading the reference. `vc/veffects.h:22–25` assigns Scroll
+  Up/Down IDs 6/7 and Reveal Up/Down IDs 8/9.
+  `vc/neweffects.c:93–153,1114–1144,1223–1251,1935–1938` supplies the shared
+  1–255 duration control, default 25, zero other defaults, screen object
+  class, start/stop placement and the same field step and reserved length
+  as the four slides. The active VC10 grammar is unchanged.
+- `vc/fx.c:358–392,610–731` supplies the four Init/Func/End contracts.
+  `videocreator.asm::CopLoopNoSquash` switches pictures at `Start2`;
+  `buildscreen` applies the corresponding `SkipLines`. For an active
+  frame, `m` is the total stepped rows, with `m < 255`:
+
+  | Effect | Split row | Top picture / first source row | Bottom picture / first source row |
+  | --- | --- | --- | --- |
+  | Scroll Up (6) | `255-m` | outgoing / `m+1` | incoming / 0 |
+  | Scroll Down (7) | `m` | incoming / `256-m` | outgoing / 0 |
+  | Reveal Up (8) | `255-m` | outgoing / 0 | incoming / `255-m` |
+  | Reveal Down (9) | `m` | incoming / 0 | outgoing / `m` |
+
+- The existing shared timing path remains: field step
+  `ceil(256/(2*a-1))`, update before Func/End, and one initial update at
+  tick 0 because `mainloop.c:489–516,556–595` dispatches startup `Bodge2`
+  first. A first cue at tick 1 and later cues receive two updates per
+  tick. Seek samples after both logical fields. At duration 25, a later
+  cue steps 12/132/252 rows at relative ticks 0/10/20 and settles at 21;
+  a tick-zero cue steps 6/126/246 and also settles at 21.
+- At duration 1, Scroll Down and Reveal Down reach End before their
+  first Func can swap pictures; like Slide Off Down, they retain the
+  outgoing picture, including startup black. Their End resets the row
+  offset and removes the second region. The other new effects select
+  the target. Held output becomes the base of the following cue.
+- These are independently implemented, source-derived logical picture
+  expectations, not original-Amiga captures. The existing independently
+  generated row cards distinguish all 256 rows and both pictures.
+  Chipset scanout, copper buffering, depth-dependent blank-line/palette
+  tricks, physical field timing and timer jitter remain unqualified.
+  Paired screens still preview only their first member.
+- Four named buttons reuse the selected-picture and duration workflow;
+  two extra rows extend the client height from 384 to 438 pixels without
+  changing the preview size or horizontal timeline mapping.
+
+### Host verification — 2026-11-20
+
+- All four required local commands **passed (exit 0)**, not run by CI:
+  `python tools/editor.py test`, `python tools/editor.py build`,
+  `python tools/editor.py smoke` and
+  `python -m unittest discover -s tools -p test_play_capture.py`
+  (**3 tests**). Host: Windows 11 Pro x64 `26300.9974`, NTFS,
+  Python 3.14.4 and GCC 16.1.0.
+- Build: verified Open Watcom `2026-11-01-Build`, x86 PE32 GUI 4.0,
+  static WinMain, direct GDI32/KERNEL32/USER32 imports only, no delay
+  imports. The checkout had no Watcom cache; `python tools/probe.py
+  bootstrap` downloaded and verified the pinned official asset before use.
+  `python tools/asset.py prepare F:\AmigaVid\inputs\vc.zip` verified the
+  archive and prepared only the two local smoke fixtures.
+  Final `VCEDIT.EXE` SHA-256:
+  `4ccbb0be9d544bef909f429e6b18bcd51d3b0b259805552f31b1384ccb56cf76`.
+- Model checks cover IDs 2–9 at durations 1/2/19/25/65/255, exact LF/CRLF
+  round-trips to canonical LF with nondefault metadata, target, `a`–`e`
+  and shifted text, independent split/source-row expectations, first cues
+  at ticks 0/1, completion, held output and following Cut/Slide cues.
+  Placement failures for invalid durations, unsupported IDs, overlaps
+  and timeline bounds leave a byte-identical project; adjacent cues on
+  both sides and a cue ending at the timeline limit succeed. The 27
+  malformed/unsafe cases and existing native NT save/fault checks pass.
+- Native smoke passes **72 first-transition cases** (the existing 24
+  slides at tick 0 plus 48 new-effect cases at ticks 0 and 1) and
+  **48 Cut-then-transition cases**, all at the six durations above.
+  Each authors through the native buttons, checks exact saved VC10 bytes,
+  quits, reopens and compares every one of 81,920 painted pixels per
+  sampled frame using independent row-card slices. Backward Seek,
+  clock-paced Play and ordinary timer-driven completion agree, including
+  direction-sensitive intermediate rows and duration-1 downward retention.
+  Eight additional sequences place a following Slide immediately adjacent
+  to each new effect at duration 1 or 25 and check its Seek/Play output and
+  saved fields. Nondefault paired-target imports, default duration 25,
+  refused UI/import durations, unsupported IDs and conflicting imports/
+  drags preserve the document. Existing artwork, Cut, all slides, marker
+  gestures, containment and save/recovery checks also pass.
+- No timed Play sample needed a retry in the final smoke. The expanded
+  model test failed against the pre-implementation model (exit 1 at
+  `vc_place` for newly supported ID 6); `.editor/ISSUE42-test-before.txt`
+  retains that result. An initial smoke was deliberately stopped after
+  correcting a button mnemonic; only the rebuilt executable's complete
+  final smoke is used for the result above.
+- Local evidence in this issue worktree: `.editor/ISSUE42-build-final.txt`,
+  `ISSUE42-test-final.txt`, `ISSUE42-smoke-final.txt`,
+  `ISSUE42-unit-final.txt`, `PE-IMPORTS.txt` and `HOST-SMOKE.txt`.
+  Preserve these before removing the worktree. The full README was reviewed
+  and updated for all four effects; probe, archive, viewer, save protection
+  and release guidance remains applicable. Original code/artwork, binaries
+  and captures are not published.
+- This executable was exercised only on the modern host. Windows 98 FE/SE
+  and x86 XP RTM/SP3 editor qualification, physical target hardware,
+  original-Amiga reader/rendering comparison and editor-release acceptance
+  remain outstanding; earlier guest evidence predates these effects.
+
 ## Open blockers
 
 - The [five missing files](#recovered-and-missing-files) still need locating;
@@ -1197,9 +1299,9 @@ Before milestone 2, real-asset ILBM decoding and display was the next
 independent development step; the viewer now has host and four-guest
 evidence under #16's calibrated-output criterion. Before milestone 3,
 the next step was to edit, save, reopen and replay one sequence. The
-two-picture workflow is now implemented, followed by the vertical slide
-family above. The next candidate batch is Scroll Up/Down (6/7) and
-Reveal Up/Down (8/9), subject to separate approval; the rest of milestone 4
-and special screens remain outstanding. Obtain physical Windows 98 and XP
+two-picture workflow is now implemented, followed by the vertical slide,
+Scroll Up/Down (6/7) and Reveal Up/Down (8/9) families above. The rest of
+milestone 4 and special screens remain outstanding; choose the next small
+effect family through a separately approved plan. Obtain physical Windows 98 and XP
 [probe target-checklist](probe/TEST.TXT) results before claiming native
 hardware validation. Editor-release workflows remain unverified.

@@ -23,6 +23,13 @@ def authored(first, second, tick, duration):
             f"{tick}\n2\n7\n{duration}\n0\n0\n0\n0\n0\nNOTEXT\n".encode("ascii"))
 
 
+def shared_markers(cues):
+    # Independent VC10 bytes; parameter b identifies each Cut after reordering.
+    return (HDR + b"Shared markers\n7\n1\nWDQjdt;Xbsn!Bsu/jgg\nZIP\n0\n0\n0\n4\n" +
+            b"".join(f"{tick}\n1\n6\n0\n{identity}\n0\n0\n0\n0\nNOTEXT\n".encode("ascii")
+                     for tick, identity in cues))
+
+
 def exercise(exe, digest, work, out):
     user = ct.WinDLL("user32", use_last_error=True)
     gdi = ct.WinDLL("gdi32", use_last_error=True)
@@ -38,6 +45,7 @@ def exercise(exe, digest, work, out):
     visible = api(user, "IsWindowVisible", w.BOOL, w.HWND)
     cls_of = api(user, "GetClassNameW", ct.c_int, w.HWND, w.LPWSTR, ct.c_int)
     get_child = api(user, "GetDlgItem", w.HWND, w.HWND, ct.c_int)
+    find_child = api(user, "FindWindowExW", w.HWND, w.HWND, w.HWND, w.LPCWSTR, w.LPCWSTR)
     post = api(user, "PostMessageW", w.BOOL, w.HWND, w.UINT, w.WPARAM, w.LPARAM)
     send = api(user, "SendMessageTimeoutW", w.LPARAM, w.HWND, w.UINT, w.WPARAM, w.LPARAM,
                w.UINT, w.UINT, ct.c_void_p)
@@ -107,11 +115,14 @@ def exercise(exe, digest, work, out):
     def sync(hwnd):
         checked(send(hwnd, 0, 0, 0, 2, 1000, None))
 
-    def dialog_text(hwnd):
+    def control_text(hwnd, id):
         actual = ct.create_unicode_buffer(512)
-        checked(send(checked(get_child(hwnd, 65535)), 0x000D,
+        checked(send(checked(get_child(hwnd, id)), 0x000D,
                      len(actual), ct.addressof(actual), 2, 1000, None))
         return actual.value
+
+    def dialog_text(hwnd):
+        return control_text(hwnd, 65535)
 
     def dialog(proc, text):
         hwnd = until(proc, lambda: find(proc.pid, "#32770"), "error dialog")
@@ -171,9 +182,13 @@ def exercise(exe, digest, work, out):
         return until(proc, lambda: (data := frame(hwnd)) and sha(data) == expected_hash and data,
                      f"expected full preview at tick {tick}")
 
-    def drag(hwnd, start, end):
+    def click_track(hwnd, x):
+        for msg, wp in ((0x0201, 1), (0x0202, 0)):
+            checked(send(hwnd, msg, wp, x | (320 << 16), 2, 1000, None))
+
+    def drag(hwnd, start, end, span=124):
         # The timeline initially spans 0..124 across 552 pixels at (16,316).
-        coord = lambda tick: (16 + round(tick * 552 / 124)) | (320 << 16)
+        coord = lambda tick: (16 + round(tick * 552 / span)) | (320 << 16)
         for msg, wp, tick in ((0x0201, 1, start), (0x0200, 1, end), (0x0202, 0, end)):
             checked(send(hwnd, msg, wp, coord(tick), 2, 1000, None))
 
@@ -218,7 +233,63 @@ def exercise(exe, digest, work, out):
             until(proc, project.is_file, "saved VC10")
             sync(hwnd)
             require(project.read_bytes() == intended, "authored VC10 does not match independent bytes")
+            drag(hwnd, 50, 0)
+            require(control_text(hwnd, 111) == "50", "overlapping move did not retain the cue tick")
+            unchanged = work / "overlap.vid"
+            open_file(hwnd, unchanged.name, 102)
+            require(unchanged.read_bytes() == intended, "overlapping move changed cue data")
+            click_track(hwnd, 461)
+            require(control_text(hwnd, 111) == "100", "empty-track click did not seek")
+            log.append("PASS single-marker drag, overlapping move rejection and empty-track seek.")
             quit_editor(proc, hwnd)
+
+        crowded = work / "shared.vid"
+        original = shared_markers(((10, 1), (11, 2), (12, 3), (4000, 4)))
+        crowded.write_bytes(original)
+        with launch() as (proc, hwnd):
+            open_file(hwnd, crowded.name, 101)
+            # At span 4025, all three starts paint at x=17.
+            for tick in (10, 11, 12, 10):
+                click_track(hwnd, 17)
+                require(control_text(hwnd, 111) == str(tick),
+                        f"shared marker did not select tick {tick} in order")
+                require(find_child(hwnd, None, "STATIC", f"Selected cue at tick {tick}."),
+                        f"shared marker did not identify the selected cue at tick {tick}")
+            # Even a stationary click at the edge of the hit area must not move it.
+            click_track(hwnd, 22)
+            require(control_text(hwnd, 111) == "11", "shared marker selection at hit-area edge")
+            selection = work / "selection.vid"
+            open_file(hwnd, selection.name, 102)
+            require(selection.read_bytes() == original, "selection alone changed saved cue data")
+            click_track(hwnd, 17)
+            require(control_text(hwnd, 111) == "12", "saving lost the selected cue")
+            quit_editor(proc, hwnd)  # Selection alone must not prompt to discard changes.
+            log.append("PASS three cues at one pixel: 10 -> 11 -> 12 -> 10 wrap, hit-area edge, byte-exact selection save and clean close.")
+
+        with launch() as (proc, hwnd):
+            open_file(hwnd, crowded.name, 101)
+            drag(hwnd, 10, 500, span=4025)
+            direct = work / "shared-first.vid"
+            open_file(hwnd, direct.name, 102)
+            require(direct.read_bytes() == shared_markers(((11, 2), (12, 3), (503, 1), (4000, 4))),
+                    "shared-marker drag without prior selection did not move the first cue")
+            open_file(hwnd, crowded.name, 101)
+            for tick in (10, 11):
+                click_track(hwnd, 17)
+                require(control_text(hwnd, 111) == str(tick), "selection after project reopen")
+            drag(hwnd, 11, 500, span=4025)
+            # Drop x=85 maps independently to round(69 * 4025 / 552) = 503.
+            expected = shared_markers(((10, 1), (12, 3), (503, 2), (4000, 4)))
+            moved = work / "shared-moved.vid"
+            open_file(hwnd, moved.name, 102)
+            require(moved.read_bytes() == expected,
+                    "shared-marker drag did not move only the selected non-first cue")
+            # The move sorted the array; selection must not become a stale index.
+            for tick in (10, 12, 10):
+                click_track(hwnd, 17)
+                require(control_text(hwnd, 111) == str(tick), "selection after cue reordering")
+            quit_editor(proc, hwnd)
+            log.append("PASS direct shared-marker drag moves the first cue; selected non-first cue 11 -> 503 drag matches independent VC10 bytes, retaining other cues and parameters; cycling survives reordering.")
 
         with launch() as (proc, hwnd):
             open_file(hwnd, fixture.name, 101)

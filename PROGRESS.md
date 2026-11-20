@@ -453,6 +453,39 @@ those disks were not booted again for this re-verification.
   before and after restart, playback, failed-open retention, and linked,
   locked, eligible and interrupted replacement checks passed.
 
+**Shared-marker selection (issue #20, 2026-11-20):**
+
+- Stationary clicks now cycle through cues under a marker in timeline order
+  and wrap. The status and tick box identify the selected start tick;
+  selection does not edit cue data or mark the document unsaved. A drag
+  keeps the selected cue instead of cycling on press. With no selection,
+  an ordinary drag still takes the first hit.
+- The new native regression failed on the unchanged editor with
+  `shared marker did not select tick 11 in order` (exit 1). After the fix,
+  `python tools/editor.py build`, `python tools/editor.py test` and
+  `python tools/editor.py smoke` each passed (exit 0), locally, not in CI.
+  Host: Windows 11 x64 build 26300, NTFS, Python 3.14.4 and GCC 16.1.0.
+  Build: verified Open Watcom `2026-11-01-Build`, x86 PE32 GUI 4.0,
+  static WinMain, direct GDI32/KERNEL32/USER32 only, no delay imports.
+  `VCEDIT.EXE` SHA-256:
+  `238705b45bee080783485c15ddd31b337434084b0ce45013883b0921335649ba`.
+- Smoke checks three Cut cues at ticks 10, 11 and 12 at pixel x=17,
+  selection through 10/11/12/10, a stationary hit-area-edge click,
+  byte-identical saved selection and clean close without an unsaved prompt.
+  It compares a direct first-cue drag and a selected cue 11 → 503 drag
+  against independently encoded VC10 bytes, retaining all other cues and
+  parameters. Reordering, single-marker drags, rejected overlap and
+  empty-track seek pass, as do all previous preview, persistence and
+  recovery checks. The model fixtures, 27 rejection cases and NT save
+  protection/fault tests also pass.
+- Local build/import evidence and native smoke log are in `.editor/`.
+  The full README was reviewed and the selection gesture documented;
+  probe, archive, viewer, save-protection and release guidance still apply.
+  This changed executable was exercised only on the modern host, not on
+  Windows 98, XP, physical target hardware or an original Amiga reader.
+  Earlier guest evidence remains historical; the next milestone is
+  unchanged.
+
 ### Guest verification
 
 **First implementation (before review fixes):**

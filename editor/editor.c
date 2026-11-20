@@ -31,6 +31,7 @@ static HWND window, files, pictures, duration, position, status;
 static unsigned long tick, shown_tick;
 static DWORD started;
 static int playing, dragging = -1, drag_x, dirty;
+static int selected = -1, drag_start_x, drag_moved;
 static int painted;
 static struct vc_frame shown;
 static unsigned char rgb[VC_WIDTH * VC_HEIGHT * 3], indexed[VC_WIDTH * VC_HEIGHT];
@@ -292,6 +293,7 @@ static void open_project(void)
     for (i = 0; i < doc->project.screens; ++i)
         list_picture(i);
     tick = 0;
+    selected = -1;
     painted = dirty = 0;
     message(paired ? "Project opened. Two-picture screens preview their first image." : "Project opened.");
     refresh();
@@ -382,6 +384,7 @@ static void add_cue(unsigned effect)
         return;
     }
     dirty = 1;
+    selected = -1;
     message("Cue added. Drag its timeline marker to change the start tick.");
     refresh();
 }
@@ -428,6 +431,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     unsigned long next;
     struct vc_cue cue;
     int x, y;
+    char label[64];
     BOOL ok;
 
     switch (msg) {
@@ -487,17 +491,25 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         for (i = 0; i < doc->project.cues; ++i) {
             if (abs(x - to_x(doc->project.cue[i].tick)) <= 5) {
                 dragging = (int)i;
-                drag_x = x;
+                if (selected >= 0 &&
+                    abs(x - to_x(doc->project.cue[selected].tick)) <= 5)
+                    dragging = selected;
+                drag_start_x = drag_x = x;
+                drag_moved = 0;
                 SetCapture(hwnd);
                 return 0;
             }
         }
+        selected = -1;
         tick = to_tick(x);
         refresh();
         return 0;
     case WM_MOUSEMOVE:
         if (dragging >= 0) {
-            drag_x = to_x(to_tick((short)LOWORD(lp)));
+            x = (short)LOWORD(lp);
+            if (x != drag_start_x)
+                drag_moved = 1;
+            drag_x = to_x(to_tick(x));
             InvalidateRect(hwnd, NULL, FALSE);
         }
         return 0;
@@ -512,19 +524,38 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             ReleaseCapture();
             cue = doc->project.cue[i];
             x = (short)LOWORD(lp);
-            next = to_tick(x);
-            if (abs(x - to_x(cue.tick)) <= 2)
+            if (!drag_moved && x == drag_start_x) {
+                /* Cycle only on release, so a drag keeps the selected cue. */
+                if (selected == (int)i) {
+                    changed = (i + 1) % doc->project.cues;
+                    while (changed != i &&
+                           abs(x - to_x(doc->project.cue[changed].tick)) > 5)
+                        changed = (changed + 1) % doc->project.cues;
+                    i = changed;
+                    cue = doc->project.cue[i];
+                }
                 next = cue.tick;
+                wsprintfA(label, "Selected cue at tick %lu.", next);
+                message(label);
+            } else {
+                next = to_tick(x);
+                if (abs(x - to_x(cue.tick)) <= 2)
+                    next = cue.tick;
+            }
             if (next != cue.tick) {
                 cue.tick = next;
                 if (vc_place(&doc->project, i, &cue)) {
                     dirty = 1;
                     message("Cue moved.");
+                    for (i = 0; i < doc->project.cues; ++i)
+                        if (doc->project.cue[i].tick == next)
+                            break;
                 } else {
                     message("Cue overlaps another effect or the end of the timeline.");
                     next = doc->project.cue[i].tick;
                 }
             }
+            selected = (int)i;
             tick = next;
             refresh();
         }

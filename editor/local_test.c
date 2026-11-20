@@ -2,7 +2,7 @@
 #include "local.c"
 #include <stdio.h>
 
-static nt_set_fn real_set_file;
+static nt_info_fn real_set_file;
 static unsigned fail_renames;
 static int fail_delete;
 static unsigned rename_calls, empty_cleanups;
@@ -55,6 +55,7 @@ int main(int argc, char **argv)
     unsigned before;
     nt_query_dir_fn query_dir = NULL;
     nt_query_security_fn query_security = NULL;
+    nt_info_fn query_file;
 
     need(argc == 3 && strlen(argv[2]) + 2 <= sizeof(root), "two scratch paths required");
     notice = local_init(argv[1]);
@@ -65,11 +66,19 @@ int main(int argc, char **argv)
        initial pinning. The Python driver checks both scratch directories. */
     strcpy(root, argv[2]);
     strcat(root, "\\");
+    query_file = nt_query_file;
+    nt_query_file = NULL;
     notice = local_save(leaf, "old", 3, 0, &published);
-    need(published && !notice && matches(leaf, "old"), "first save uses pinned directory");
+    need(published && !notice && matches(leaf, "old"), "first save needs no stream query and uses pinned directory");
+    nt_query_file = query_file;
 
     real_set_file = nt_set_file;
     nt_set_file = controlled_set;
+    notice = local_save("notes.vid", "new", 3, 1, &published);
+    need(!published && notice == bad_streams && !rename_calls && !empty_cleanups &&
+         matches("notes.vid", "old"), "named stream must refuse before staging or rename");
+    puts("PASS named NT data stream refuses replacement before staging or rename");
+
     notice = local_save("private.vid", "new", 3, 1, &published);
     need(!published && notice == bad_security, notice ? notice : "different DACL must refuse");
     need(!rename_calls && empty_cleanups == 1 && matches("private.vid", "old"),
@@ -111,6 +120,11 @@ int main(int argc, char **argv)
     need(!published && notice == bad_security && rename_calls == before && empty_cleanups == 2 &&
          matches(leaf, "new"), "missing protection API must refuse before writing");
     nt_query_security = query_security;
+    nt_query_file = NULL;
+    notice = local_save(leaf, "later", 5, 1, &published);
+    need(!published && notice == bad_streams && rename_calls == before && empty_cleanups == 2 &&
+         matches(leaf, "new"), "missing stream API must refuse before staging or rename");
+    nt_query_file = query_file;
     puts("PASS missing NT metadata APIs refuse replacement without writing or renaming");
 
     leaf = "test.vid";

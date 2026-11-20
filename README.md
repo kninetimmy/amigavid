@@ -247,6 +247,12 @@ Previously a typed 8.3 alias could become the project's name after
 replacement or rollback. Both save paths now refuse replacement through
 a true short alias; reopen by the full filename. A literal `~` filename
 is still valid. This applies to every replacement, not to reads.
+Previously NT replacement could lose a project's named data streams when
+it discarded the old file. Now every NT replacement checks the opened
+original and refuses before staging if it finds extra streams or cannot
+confirm that only the ordinary data stream exists. The original is left
+untouched; save to a new filename to keep it. Reads, first saves, and
+replacement of eligible ordinary files are unchanged.
 The Windows 98 local FAT/FAT32 fallback still uses absolute paths; this is
 not a power-loss guarantee for FAT.
 
@@ -256,9 +262,11 @@ Before milestone 3, the PRD's first useful demo was a goal: open real
 editor artwork on Windows 98, add two pictures and a timed transition, save
 the project, and play that file on XP with the same executable. The
 fixed editor passes on Windows 98 SE and x86 XP Professional SP3
-QEMU guests using a 98 save that references a filename with `~`. The 98
-FAT32 run also checked successful replacement, rejection of a true short
-alias, and preservation of a preexisting backup. The
+QEMU guests using a 98 save that references a filename with `~`. The
+named-stream fix repeated the same-file demo and verified ordinary NTFS
+replacement on XP. The earlier 98 FAT32 run also checked successful
+replacement, rejection of a true short alias, and preservation of a
+preexisting backup. The
 [milestone 3 evidence](PROGRESS.md#milestone-3--two-picture-editor) separates
 host and guest results. The original Amiga reader and physical hardware
 are not verified.

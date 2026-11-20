@@ -33,14 +33,15 @@ typedef LONG (WINAPI *nt_open_fn)(HANDLE *, ACCESS_MASK, struct nt_attributes *,
 typedef LONG (WINAPI *nt_create_fn)(HANDLE *, ACCESS_MASK, struct nt_attributes *,
                                     struct nt_status *, LARGE_INTEGER *, ULONG,
                                     ULONG, ULONG, ULONG, PVOID, ULONG);
-typedef LONG (WINAPI *nt_set_fn)(HANDLE, struct nt_status *, PVOID, ULONG, ULONG);
+typedef LONG (WINAPI *nt_info_fn)(HANDLE, struct nt_status *, PVOID, ULONG, ULONG);
 typedef LONG (WINAPI *nt_query_dir_fn)(HANDLE, HANDLE, PVOID, PVOID, struct nt_status *,
                                        PVOID, ULONG, ULONG, BOOLEAN, struct nt_name *, BOOLEAN);
 typedef LONG (WINAPI *nt_query_security_fn)(HANDLE, SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
                                            ULONG, ULONG *);
 static nt_open_fn nt_open_file;
 static nt_create_fn nt_create_file;
-static nt_set_fn nt_set_file;
+static nt_info_fn nt_set_file;
+static nt_info_fn nt_query_file;
 static nt_query_dir_fn nt_query_dir;
 static nt_query_security_fn nt_query_security;
 
@@ -50,6 +51,7 @@ static nt_query_security_fn nt_query_security;
 #define NT_BUFFER_TOO_SMALL ((LONG)0xc0000023UL)
 #define NT_RENAME 10                     /* FileRenameInformation */
 #define NT_DISPOSITION 13                /* FileDispositionInformation */
+#define NT_STREAM 22                     /* FileStreamInformation */
 #define NT_ID_BOTH_DIR 37                /* FileIdBothDirectoryInformation */
 
 static void close_to(unsigned keep)
@@ -206,7 +208,8 @@ const char *local_init(const char *argument)
         ntdll = GetModuleHandleA("ntdll.dll");
         nt_open_file = ntdll ? (nt_open_fn)GetProcAddress(ntdll, "NtOpenFile") : NULL;
         nt_create_file = ntdll ? (nt_create_fn)GetProcAddress(ntdll, "NtCreateFile") : NULL;
-        nt_set_file = ntdll ? (nt_set_fn)GetProcAddress(ntdll, "NtSetInformationFile") : NULL;
+        nt_set_file = ntdll ? (nt_info_fn)GetProcAddress(ntdll, "NtSetInformationFile") : NULL;
+        nt_query_file = ntdll ? (nt_info_fn)GetProcAddress(ntdll, "NtQueryInformationFile") : NULL;
         nt_query_dir = ntdll ? (nt_query_dir_fn)GetProcAddress(ntdll, "NtQueryDirectoryFile") : NULL;
         nt_query_security = ntdll ? (nt_query_security_fn)GetProcAddress(ntdll, "NtQuerySecurityObject") : NULL;
         if (!nt_open_file || !hold_root(drive) || !hold_path(&next, '\\')) {
@@ -325,6 +328,7 @@ static const char exists[] = "That filename exists. Open that project to replace
 static const char bad_destination[] = "Save destination is not an ordinary writable file.";
 static const char bad_name[] = "Cannot verify the project filename. Open it by its full name to replace it.";
 static const char bad_security[] = "Cannot preserve the previous project's access permissions. Use a new name.";
+static const char bad_streams[] = "Project has extra data streams or they could not be checked. Use a new name.";
 
 static unsigned fold_ascii(unsigned ch)
 {
@@ -388,6 +392,29 @@ static int named_fat(const char *path, const char *leaf)
         if (fold_ascii((unsigned char)entry.cFileName[n]) != fold_ascii((unsigned char)leaf[n]))
             return 0;
     return entry.cFileName[n] == 0;
+}
+
+static int only_default_stream(HANDLE prior)
+{
+    static const WCHAR default_name[] = L"::$DATA";
+    struct nt_stream_entry {
+        ULONG next, bytes;
+        LARGE_INTEGER size, allocated;
+        WCHAR name[sizeof(default_name) / sizeof(WCHAR)];
+    } entry;
+    /* The native result buffer must be aligned to 8 bytes, also on x86. */
+    char storage[sizeof(entry) + 7];
+    void *buffer = (void *)(((ULONG_PTR)storage + 7) & ~(ULONG_PTR)7);
+    struct nt_status io = { 0 };
+    const size_t header = offsetof(struct nt_stream_entry, name);
+
+    /* Space for one default stream only. Overflow is not proof of absence. */
+    if (!nt_query_file || nt_query_file(prior, &io, buffer, sizeof(entry), NT_STREAM) != 0 ||
+        io.information < header || io.information > sizeof(entry))
+        return 0;
+    memcpy(&entry, buffer, io.information);
+    return !entry.next && (!entry.bytes || (entry.bytes == sizeof(default_name) - sizeof(WCHAR) &&
+           io.information - header >= entry.bytes && !memcmp(entry.name, default_name, entry.bytes)));
 }
 
 static void *read_security(HANDLE file, ULONG *size)
@@ -461,6 +488,9 @@ static const char *save_nt(const char *leaf, const char *data, DWORD size, int r
     } else if (!named_nt(prior, leaf)) {
         CloseHandle(prior);
         return bad_name;
+    } else if (!only_default_stream(prior)) {
+        CloseHandle(prior);
+        return bad_streams;
     }
 
     for (i = 0; i < 100; ++i) {

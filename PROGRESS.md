@@ -435,6 +435,24 @@ those disks were not booted again for this re-verification.
   round-trip, failed-open retention and the linked, locked, eligible
   and interrupted replacement cases with this EXE.
 
+**Named-stream retention fix:**
+
+- `python tools/editor.py build`: same Watcom pin, PE32 x86 GUI 4.0,
+  static WinMain, direct GDI32/KERNEL32/USER32, no delay imports.
+  `VCEDIT.EXE` SHA-256
+  `2b82625815aa1ffded5f36f12619ba181d3d243bb9abad8e7974c22575f15640`.
+- `python tools/editor.py test`: the two LF/CRLF fixtures, exact VC10
+  output and frame geometry, and 27 rejection cases passed. An NTFS scratch
+  project with a benign `annotations` stream was refused before staging
+  or renaming. Its main and auxiliary bytes were unchanged and no backup
+  or temp file appeared. A missing stream API refused replacement but did
+  not block a first save. Ordinary replacements and the preceding DACL,
+  alias, pinned-directory and rollback controls passed.
+- `python tools/editor.py smoke`: Windows 11 native authoring, exact
+  first save, paired fixture round-trip, seven full-frame comparisons
+  before and after restart, playback, failed-open retention, and linked,
+  locked, eligible and interrupted replacement checks passed.
+
 ### Guest verification
 
 **First implementation (before review fixes):**
@@ -570,6 +588,41 @@ and release qualification remain unverified or out of scope.
   inputs. Original Amiga reader, 98 FE and XP RTM editor runs, physical
   hardware and release qualification remain unverified.
 
+**Named-stream retention fix (fresh guests):**
+
+- The same offline QEMU 11.1.0 configurations and clean baselines were
+  used on Windows 98 SE `4.10.2222` and x86 XP Professional SP3
+  `2600.xpsp.080413-2111`. On both, `A:\SETUP.BAT` installed the new
+  checksummed EXE and pictures; `FC /B` found no EXE differences against
+  the read-only kit. Both used `copy /b C:\M3EDIT\BG.IFF C:\M3EDIT\BG~1.IFF`
+  and ran `C:\M3EDIT\VCEDIT.EXE C:\M3EDIT`.
+- On 98 SE (FAT32), authored Cut at tick 0 and Slide at 25 with duration
+  19, dragged Slide to 50, saved `DEMO.VID`, quit, reopened and replayed.
+  After shutdown, read the actual 135 bytes from the overlay. They match
+  the independent VC10 expectation, SHA-256
+  `3d04d2a152738c4c2e8c984acf1325b163c2c5d55489595009911968deeb3686`.
+- On XP SP3 (NTFS), `copy /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` and
+  `fc /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` transferred and verified that
+  exact save. Ctrl+O opened it, Seek checked ticks 49, 58 and 68, and
+  F5 reached playback completion. All 11 fresh guest captures
+  (including 98 before and after restart) matched every one of their
+  81,920 pixels, with the same calibrated 98 and canonical XP hashes
+  as in the table above.
+- XP NTFS ordinary replacement: made a separate `CHECK.VID` with
+  `copy /b`, opened it in VCEDIT, dragged Slide from 50 to 57, saved
+  over that copy and reopened it at the new cue position. `fc /b`
+  showed exactly the expected byte change (`30` to `37` at offset
+  `0x6d`); the transferred `DEMO.VID` still matched the floppy and
+  `dir /a /b` showed no `.bak` or `.tmp` files.
+- Preserve `.editor/guest-stream/` (`KEEP.txt`, `MANIFEST.json`)
+  separately from the three earlier guest evidence sets and their
+  dependencies. Both overlays passed `qemu-img check` after shutdown
+  and the base/backing hashes were unchanged. Named-stream refusal was
+  tested on the host; XP verified eligible replacement. The earlier
+  FAT32 replacement controls were not repeated in this cycle. Original
+  Amiga reader, physical hardware, FAT power loss, and editor release
+  qualification remain unverified.
+
 ### Before/after inventory
 
 | Element | Before → after |
@@ -605,6 +658,22 @@ rollback and cleanup behavior are otherwise unchanged. The host driver
 and `tools/editor.py test` add scratch checks only; no guest or test
 hook is linked into the editor. GUI, model, original format, decoder,
 probe and viewer behavior are unchanged by this follow-up.
+
+**Named-stream retention follow-up:** The NT save boundary in
+`editor/local.c` previously discarded named data streams with the old
+file after publication. Now every NT replacement calls
+`NtQueryInformationFile(FileStreamInformation)` on the held original and
+proceeds only on a complete result with one unnamed data stream. Extra
+streams, unavailable or unsupported queries, overflow and invalid
+results refuse before staging. No path is reopened for that check, and
+the existing handle, sharing, name, link, DACL, backup and rollback rules
+remain. This is not a guarantee against concurrent workspace changes.
+Reads, first saves and the 9x FAT path are unchanged.
+`editor/local_test.c` and `tools/editor.py test` keep the earlier tests and
+add a scratch-only retention check; no test code is linked into the
+editor. The GUI, model, original format, decoder, probe and viewer are
+unchanged. The full README was reviewed: the save guidance now describes
+the refusal; probe, archive, viewer and release instructions still apply.
 
 ## Open blockers
 

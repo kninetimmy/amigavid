@@ -166,14 +166,21 @@ def test():
         ordinary = pinned / "Long Project File.vid"
         ordinary.write_bytes(b"old")
         inherited = run(icacls, ordinary, cwd=work, env=None)
+        notes = pinned / "notes.vid"
+        notes.write_bytes(b"old")
+        stream = Path(f"{notes}:annotations")
+        stream.write_bytes(b"scratch project notes\n")
         print(run(local_driver, pinned, alternate, cwd=work, env=None), end="")
         require(run(icacls, private, cwd=work, env=None) == acl_before,
                 "refusal changed the private project's DACL")
         require(run(icacls, ordinary, cwd=work, env=None) == inherited,
                 "ordinary replacement changed the project's DACL")
+        require(notes.read_bytes() == b"old" and stream.read_bytes() == b"scratch project notes\n",
+                "refusal changed the main file or its named stream")
+        print("PASS refused replacement retained the scratch project's main and auxiliary bytes")
         require({p.name: p.read_bytes() for p in pinned.iterdir()} ==
                 {"test.vid.bak": b"old", "warning.vid": b"new", "warning.vid.bak": b"old",
-                 private.name: b"old", ordinary.name: b"new", "LIT~1.VID": b"new"},
+                 private.name: b"old", ordinary.name: b"new", notes.name: b"old", "LIT~1.VID": b"new"},
                 "wrong pinned files after controlled failures (including staging cleanup)")
         require({p.name: p.read_bytes() for p in alternate.iterdir()} ==
                 {"test.vid": b"untouched outside the pinned workspace"},

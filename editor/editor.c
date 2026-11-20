@@ -430,7 +430,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     unsigned i, changed;
     unsigned long next;
     struct vc_cue cue;
-    int x, y;
+    int x, y, distance, closest;
     char label[64];
     BOOL ok;
 
@@ -488,20 +488,28 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (y < GRID_Y - 9 || y > GRID_BOTTOM)
             return 0;
         stop();
+        dragging = -1;
+        closest = 6;
+        /* Hit the nearest marker; equal distances keep timeline order. */
         for (i = 0; i < doc->project.cues; ++i) {
-            if (abs(x - to_x(doc->project.cue[i].tick)) <= 5) {
+            distance = abs(x - to_x(doc->project.cue[i].tick));
+            if (distance < closest) {
+                closest = distance;
                 dragging = (int)i;
-                if (selected >= 0 &&
-                    abs(x - to_x(doc->project.cue[selected].tick)) <= 5)
-                    dragging = selected;
-                drag_start_x = drag_x = x;
-                drag_moved = 0;
-                SetCapture(hwnd);
-                return 0;
             }
+        }
+        if (dragging >= 0) {
+            if (selected >= 0 &&
+                to_x(doc->project.cue[selected].tick) == to_x(doc->project.cue[dragging].tick))
+                dragging = selected;
+            drag_start_x = drag_x = x;
+            drag_moved = 0;
+            SetCapture(hwnd);
+            return 0;
         }
         selected = -1;
         tick = to_tick(x);
+        message("Timeline seek.");
         refresh();
         return 0;
     case WM_MOUSEMOVE:
@@ -529,7 +537,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 if (selected == (int)i) {
                     changed = (i + 1) % doc->project.cues;
                     while (changed != i &&
-                           abs(x - to_x(doc->project.cue[changed].tick)) > 5)
+                           to_x(doc->project.cue[changed].tick) != to_x(cue.tick))
                         changed = (changed + 1) % doc->project.cues;
                     i = changed;
                     cue = doc->project.cue[i];

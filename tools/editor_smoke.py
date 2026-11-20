@@ -25,7 +25,8 @@ def authored(first, second, tick, duration):
 
 def shared_markers(cues):
     # Independent VC10 bytes; parameter b identifies each Cut after reordering.
-    return (HDR + b"Shared markers\n7\n1\nWDQjdt;Xbsn!Bsu/jgg\nZIP\n0\n0\n0\n4\n" +
+    return (HDR + b"Shared markers\n7\n1\nWDQjdt;Xbsn!Bsu/jgg\nZIP\n0\n0\n0\n" +
+            f"{len(cues)}\n".encode("ascii") +
             b"".join(f"{tick}\n1\n6\n0\n{identity}\n0\n0\n0\n0\nNOTEXT\n".encode("ascii")
                      for tick, identity in cues))
 
@@ -244,34 +245,46 @@ def exercise(exe, digest, work, out):
             quit_editor(proc, hwnd)
 
         crowded = work / "shared.vid"
-        original = shared_markers(((10, 1), (11, 2), (12, 3), (4000, 4)))
+        original = shared_markers(((10, 1), (11, 2), (12, 3), (44, 4), (4000, 5)))
         crowded.write_bytes(original)
         with launch() as (proc, hwnd):
             open_file(hwnd, crowded.name, 101)
-            # At span 4025, all three starts paint at x=17.
+            # At span 4025, three starts paint at x=17; tick 44 paints at x=22.
             for tick in (10, 11, 12, 10):
                 click_track(hwnd, 17)
-                require(control_text(hwnd, 111) == str(tick),
-                        f"shared marker did not select tick {tick} in order")
+                actual = control_text(hwnd, 111)
+                require(actual == str(tick), f"shared marker expected tick {tick}, got {actual}")
                 require(find_child(hwnd, None, "STATIC", f"Selected cue at tick {tick}."),
                         f"shared marker did not identify the selected cue at tick {tick}")
             # Even a stationary click at the edge of the hit area must not move it.
-            click_track(hwnd, 22)
+            click_track(hwnd, 12)
             require(control_text(hwnd, 111) == "11", "shared marker selection at hit-area edge")
             selection = work / "selection.vid"
             open_file(hwnd, selection.name, 102)
             require(selection.read_bytes() == original, "selection alone changed saved cue data")
             click_track(hwnd, 17)
             require(control_text(hwnd, 111) == "12", "saving lost the selected cue")
+            click_track(hwnd, 27)
+            require(control_text(hwnd, 111) == "44", "nearby marker's outer hit-area edge")
+            click_track(hwnd, 28)
+            require(control_text(hwnd, 111) == "88", "outside right hit area did not seek")
+            require(find_child(hwnd, None, "STATIC", "Timeline seek."),
+                    "empty-track seek left stale selected-tick status")
+            click_track(hwnd, 11)
+            require(control_text(hwnd, 111) == "0", "outside left hit area did not seek")
+            click_track(hwnd, 20)
+            require(control_text(hwnd, 111) == "44", "did not choose the nearer right marker")
+            click_track(hwnd, 19)
+            require(control_text(hwnd, 111) == "10", "nearby selection stole the nearer left marker")
             quit_editor(proc, hwnd)  # Selection alone must not prompt to discard changes.
-            log.append("PASS three cues at one pixel: 10 -> 11 -> 12 -> 10 wrap, hit-area edge, byte-exact selection save and clean close.")
+            log.append("PASS span 4025: x17 cycles 10 -> 11 -> 12 -> 10 excluding tick 44 at x22; nearest hits, both hit-area edges, outside seeks clear selection status, byte-exact selection save and clean close.")
 
         with launch() as (proc, hwnd):
             open_file(hwnd, crowded.name, 101)
             drag(hwnd, 10, 500, span=4025)
             direct = work / "shared-first.vid"
             open_file(hwnd, direct.name, 102)
-            require(direct.read_bytes() == shared_markers(((11, 2), (12, 3), (503, 1), (4000, 4))),
+            require(direct.read_bytes() == shared_markers(((11, 2), (12, 3), (44, 4), (503, 1), (4000, 5))),
                     "shared-marker drag without prior selection did not move the first cue")
             open_file(hwnd, crowded.name, 101)
             for tick in (10, 11):
@@ -279,7 +292,7 @@ def exercise(exe, digest, work, out):
                 require(control_text(hwnd, 111) == str(tick), "selection after project reopen")
             drag(hwnd, 11, 500, span=4025)
             # Drop x=85 maps independently to round(69 * 4025 / 552) = 503.
-            expected = shared_markers(((10, 1), (12, 3), (503, 2), (4000, 4)))
+            expected = shared_markers(((10, 1), (12, 3), (44, 4), (503, 2), (4000, 5)))
             moved = work / "shared-moved.vid"
             open_file(hwnd, moved.name, 102)
             require(moved.read_bytes() == expected,
@@ -290,6 +303,52 @@ def exercise(exe, digest, work, out):
                 require(control_text(hwnd, 111) == str(tick), "selection after cue reordering")
             quit_editor(proc, hwnd)
             log.append("PASS direct shared-marker drag moves the first cue; selected non-first cue 11 -> 503 drag matches independent VC10 bytes, retaining other cues and parameters; cycling survives reordering.")
+
+        with launch() as (proc, hwnd):
+            open_file(hwnd, crowded.name, 101)
+            click_track(hwnd, 27)
+            require(control_text(hwnd, 111) == "44", "nearby marker selection before drag")
+            drag(hwnd, 44, 22, span=4025)
+            # Drop x=19 clears the two-pixel no-move zone and maps to tick 22 at x=19.
+            nearby = work / "nearby-moved.vid"
+            open_file(hwnd, nearby.name, 102)
+            require(nearby.read_bytes() ==
+                    shared_markers(((10, 1), (11, 2), (12, 3), (22, 4), (4000, 5))),
+                    "nearby-marker move did not match independent bytes")
+            drag(hwnd, 10, 500, span=4025)
+            direct = work / "nearby-then-shared.vid"
+            open_file(hwnd, direct.name, 102)
+            require(direct.read_bytes() ==
+                    shared_markers(((11, 2), (12, 3), (22, 4), (503, 1), (4000, 5))),
+                    "selected nearby cue stole a drag starting exactly at the shared marker")
+            open_file(hwnd, crowded.name, 101)
+            for tick in (10, 11):
+                click_track(hwnd, 17)
+                require(control_text(hwnd, 111) == str(tick), "shared selection before nearby drag")
+            drag(hwnd, 44, 500, span=4025)
+            direct = work / "shared-then-nearby.vid"
+            open_file(hwnd, direct.name, 102)
+            require(direct.read_bytes() ==
+                    shared_markers(((10, 1), (11, 2), (12, 3), (503, 4), (4000, 5))),
+                    "selected shared cue stole a drag starting exactly at the nearby marker")
+            quit_editor(proc, hwnd)
+            log.append("PASS saved-byte oracles: nearby cue 44 -> 22, then exact x17 drag moves cue 10 -> 503, not selected cue 22; selected cue 11 at x17 cannot steal an exact x22 drag of cue 44 -> 503.")
+
+        tied = work / "tied.vid"
+        tied_bytes = shared_markers(((10, 1), (11, 2), (12, 3), (52, 4), (4000, 5)))
+        tied.write_bytes(tied_bytes)
+        with launch() as (proc, hwnd):
+            open_file(hwnd, tied.name, 101)
+            click_track(hwnd, 23)
+            require(control_text(hwnd, 111) == "52", "right marker before equidistant hit")
+            for tick in (10, 11, 12, 10):
+                click_track(hwnd, 20)  # Equidistant from x17 and x23: timeline order wins.
+                require(control_text(hwnd, 111) == str(tick), "equidistant marker tie order")
+            saved = work / "tied-selection.vid"
+            open_file(hwnd, saved.name, 102)
+            require(saved.read_bytes() == tied_bytes, "equidistant selection changed cue data")
+            quit_editor(proc, hwnd)
+            log.append("PASS equidistant x20 hits choose x17 before x23 regardless of prior selection; 10 -> 11 -> 12 -> 10 wrap and saved bytes unchanged.")
 
         with launch() as (proc, hwnd):
             open_file(hwnd, fixture.name, 101)

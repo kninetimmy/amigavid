@@ -455,13 +455,13 @@ those disks were not booted again for this re-verification.
 
 **Shared-marker selection (issue #20, 2026-11-20):**
 
-- Stationary clicks now cycle through cues under a marker in timeline order
-  and wrap. The status and tick box identify the selected start tick;
-  selection does not edit cue data or mark the document unsaved. A drag
-  keeps the selected cue instead of cycling on press. With no selection,
-  an ordinary drag still takes the first hit.
-- The new native regression failed on the unchanged editor with
-  `shared marker did not select tick 11 in order` (exit 1). After the fix,
+- The first implementation made stationary clicks cycle through cues at an
+  isolated marker in timeline order and wrap. The status and tick box
+  identify the selected start tick; selection does not edit cue data or
+  mark the document unsaved. A drag keeps the selected cue instead of
+  cycling on press. With no selection, an ordinary drag still takes the
+  first hit.
+- Initial implementation verification:
   `python tools/editor.py build`, `python tools/editor.py test` and
   `python tools/editor.py smoke` each passed (exit 0), locally, not in CI.
   Host: Windows 11 x64 build 26300, NTFS, Python 3.14.4 and GCC 16.1.0.
@@ -469,10 +469,10 @@ those disks were not booted again for this re-verification.
   static WinMain, direct GDI32/KERNEL32/USER32 only, no delay imports.
   `VCEDIT.EXE` SHA-256:
   `238705b45bee080783485c15ddd31b337434084b0ce45013883b0921335649ba`.
-- Smoke checks three Cut cues at ticks 10, 11 and 12 at pixel x=17,
-  selection through 10/11/12/10, a stationary hit-area-edge click,
+- That smoke checked three isolated Cut cues at ticks 10, 11 and 12 at
+  pixel x=17, selection through 10/11/12/10, a stationary hit-area-edge click,
   byte-identical saved selection and clean close without an unsaved prompt.
-  It compares a direct first-cue drag and a selected cue 11 → 503 drag
+  It compared a direct first-cue drag and a selected cue 11 → 503 drag
   against independently encoded VC10 bytes, retaining all other cues and
   parameters. Reordering, single-marker drags, rejected overlap and
   empty-track seek pass, as do all previous preview, persistence and
@@ -485,6 +485,44 @@ those disks were not booted again for this re-verification.
   Windows 98, XP, physical target hardware or an original Amiga reader.
   Earlier guest evidence remains historical; the next milestone is
   unchanged.
+
+**Nearby-marker review correction (issue #20):**
+
+- Hit testing now chooses the nearest marker within five pixels, with
+  equal-distance ties resolved in timeline order. Only cues at that exact
+  rendered x share a selection cycle or retain selection for a drag;
+  selection at another pixel cannot steal the drag. Empty-track seeks
+  clear the selected-tick status as well as the selection.
+- The expanded smoke on the pre-review binary above failed with
+  `shared marker expected tick 10, got 44` (exit 1), captured in
+  `.editor/ISSUE20-REVIEW-BASELINE.txt`. This replaces the earlier
+  unretained pre-selection baseline failure claim.
+- After correction, `python tools/editor.py build`,
+  `python tools/editor.py test` and `python tools/editor.py smoke` all
+  passed locally (exit 0), not in CI, on the same Windows 11 x64 host.
+  The verified Watcom pin, PE profile and direct imports are unchanged.
+  `VCEDIT.EXE` SHA-256:
+  `d3f0c5d64a7579724a9aa91c58418cfc39468d1efe6faad965390fe2b947f49c`.
+- Native smoke now checks span 4025 with ticks 10/11/12 at x17 and tick
+  44 at x22: cycling wraps to 10, excluding 44. Selection-only saves are
+  byte-identical. The selected non-first cue 11 → 503 move, nearby cue
+  44 → 22 move followed by an exact-x17 cue 10 → 503 drag, and an exact-x22
+  cue 44 → 503 drag while cue 11 is selected all match independent VC10
+  bytes. Nearest hits, both inclusive hit-area edges, outside seeks,
+  cleared status, equidistant ties and clean selection-only close pass.
+  The previous model, NT-save, preview and recovery checks also pass.
+- An intermediate smoke attempt dropped only two pixels from the nearby
+  marker and failed its move oracle; the test now drops three pixels,
+  preserving the existing two-pixel no-move behavior. That attempt is in
+  `.editor/ISSUE20-REVIEW-smoke.txt`; passing command logs are
+  `.editor/ISSUE20-REVIEW-build.txt`, `.editor/ISSUE20-REVIEW-test.txt` and
+  `.editor/ISSUE20-REVIEW-smoke-final.txt`. Build/import evidence and the
+  final native results remain in `.editor/PE-IMPORTS.txt` and
+  `.editor/HOST-SMOKE.txt`.
+- The full README was reviewed again and its gesture description clarified;
+  the remaining guidance is current. Only the modern host was exercised:
+  no Windows 98/XP guest, physical target or original Amiga-reader run
+  was performed for this correction.
 
 ### Guest verification
 

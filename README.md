@@ -208,11 +208,15 @@ pictures to that folder first. It must be on local FAT on Windows 98.
    relaunch, enter the same filename, **Open VID** (Ctrl+O), then **Play**.
    Move the file together with its pictures to play on another PC.
 
-When markers overlap, successive clicks without dragging select their cues
-in timeline order and wrap to the first. The tick box and status identify
+When cue starts share a marker pixel, successive clicks without dragging
+select their cues in timeline order and wrap to the first. The nearest
+marker within five pixels is hit; equal-distance ties use timeline order,
+not the prior selection. The tick box and status identify
 the selected cue's start tick. Selection alone does not change saved cue
 data. Drag from the marker to move that selected cue; a drag without prior
-selection still moves the first cue under the pointer.
+selection still moves the first cue at that marker. Selection at a different
+marker does not redirect the drag. Clicking empty track clears selection
+and seeks.
 
 Use a workspace you control; don't edit its files in another program during
 a save. Project filenames are ASCII leaves ending in `.vid`; new picture

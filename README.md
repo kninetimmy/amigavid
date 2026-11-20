@@ -7,6 +7,19 @@ required at runtime.
 See [Video-Creator-Win32-PRD.md](Video-Creator-Win32-PRD.md) for detailed
 requirements and acceptance evidence.
 
+## Have a Video Creator disk or backup?
+
+We're still looking for seven original files: `DT_STUFF.S`,
+`vc:vectors/TEST`, `SineTable.bin`, `vc:vectors/Macros.i`, `dancer2.vec`,
+`dancer5.vec` and `dancer7.vec`. The European retail disc has supplied
+projects, fonts and most vector filenames; see the
+[current recovered and missing inventory](PROGRESS.md#recovered-and-missing-files).
+
+Found a file or a lead? [Open an issue](https://github.com/kninetimmy/amigavid/issues/new).
+**No upload is needed:** tell us the original path, source or edition,
+size and SHA-256 if available. Attach a file to the public issue only if
+you are authorized to share it publicly.
+
 ## What works today
 
 The starting point was the archived Amiga source, not a Windows app.
@@ -127,7 +140,7 @@ not the editor or a release. See [PROGRESS.md](PROGRESS.md) for results.
 
 ## Archive inventory
 
-The original archive is a local reference input, not repository content.
+The pinned source archive is a local reference input, not repository content.
 Download [`vc.zip`](https://archive.org/download/vc_20221206/vc.zip) from the
 pinned source in the PRD, place it at the ignored path `inputs/vc.zip`, then
 run:
@@ -145,9 +158,11 @@ The script also accepts a local ZIP path as its only argument when the archive
 cannot be placed under `inputs/`.
 
 See [the historical milestone 0 archive baseline](docs/BASELINE.md) for the
-input map, retained reference material, blockers, attribution, and pre-probe
-target-status matrix. Its pending rows are historical; use the
-[live progress matrix](PROGRESS.md#runtime-evidence) for current status.
+source-ZIP input map, retained reference material, attribution and pre-probe
+target-status matrix. Its gaps and pending rows are historical; use the
+[current inventory](PROGRESS.md#recovered-and-missing-files) for retail-disc
+recovery and remaining file and verification gaps, and the
+[live progress matrix](PROGRESS.md#runtime-evidence) for platform status.
 
 ## Build and test the ILBM viewer
 

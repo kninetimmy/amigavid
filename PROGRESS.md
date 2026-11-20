@@ -486,7 +486,7 @@ those disks were not booted again for this re-verification.
   Earlier guest evidence remains historical; the next milestone is
   unchanged.
 
-**Nearby-marker review correction (issue #20):**
+**First nearby-marker review correction (issue #20; refined below):**
 
 - Hit testing now chooses the nearest marker within five pixels, with
   equal-distance ties resolved in timeline order. Only cues at that exact
@@ -523,6 +523,40 @@ those disks were not booted again for this re-verification.
   the remaining guidance is current. Only the modern host was exercised:
   no Windows 98/XP guest, physical target or original Amiga-reader run
   was performed for this correction.
+
+**Ordinary-drag and captured-open review correction (issue #20):**
+
+- The previous nearest-hit rule changed ordinary drags on distinct marker
+  pixels. Clicks and drags now retain the base's first hit in timeline order
+  unless the five-pixel hit window itself contains co-located cues. Only
+  then does nearest-pixel disambiguation apply; distant shared groups cannot
+  change the target. Existing shared-marker cycles and neighbor cases pass.
+- Before the fix, the expanded native smoke reproduced replacement during
+  mouse capture: exit 1, `release after project replacement reused stale
+  drag/selection`, retained in `.editor/ISSUE20-CYCLE2-BASELINE.txt`.
+  Successful project opens now cancel capture and clear pending drag and
+  selection; cue-index reads are guarded. A short no-op drag also reports
+  the newly selected cue's tick instead of leaving the previous status.
+- `python tools/editor.py build`, `python tools/editor.py test` and
+  `python tools/editor.py smoke` each passed locally (exit 0), not in CI,
+  on Windows 11 x64 build 26300, NTFS, Python 3.14.4 and GCC 16.1.0.
+  The verified Watcom pin, PE profile and imports are unchanged.
+  `VCEDIT.EXE` SHA-256:
+  `3f9e9a6885eada57d9bd12aef5bcba4a535a9d756428879f23ac6be60bd09eef`.
+- New saved-byte checks cover a no-selection x22 → x85 drag with separate
+  unshared x17/x22 markers, both without and with a distant shared group:
+  cue 10 at x17 moves to tick 503, as on base. Click selection agrees.
+  Captured project replacement checks stationary and moving releases of
+  an invalid old index and a reused valid index, with unchanged replacement
+  bytes. A short x22 → x23 no-op drag reports tick 44 in both controls and
+  saves unchanged bytes. All prior model, NT-save, preview, shared-marker,
+  reordering, overlap, seek and recovery checks still pass.
+- Command logs: `.editor/ISSUE20-CYCLE2-build.txt`, `-test.txt` and
+  `-smoke.txt`; native results and build evidence remain in
+  `.editor/HOST-SMOKE.txt` and `.editor/PE-IMPORTS.txt`. The full README was
+  reviewed and its gesture description corrected; other guidance remains
+  current. Only the modern host was exercised, not Windows 98/XP guests,
+  physical target hardware or the original Amiga reader.
 
 ### Guest verification
 

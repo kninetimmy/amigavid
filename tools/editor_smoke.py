@@ -248,6 +248,55 @@ def exercise(exe, digest, work, out):
         original = shared_markers(((10, 1), (11, 2), (12, 3), (44, 4), (4000, 5)))
         crowded.write_bytes(original)
         with launch() as (proc, hwnd):
+            for start, end in ((564, 564), (564, 85), (17, 85)):
+                open_file(hwnd, crowded.name, 101)
+                for tick in (10, 11):
+                    click_track(hwnd, 17)
+                    require(control_text(hwnd, 111) == str(tick), "selection before captured open")
+                edit(hwnd, 109, project.name)
+                checked(send(hwnd, 0x0201, 1, start | (320 << 16), 2, 1000, None))
+                # Ctrl+O dispatch while the mouse is held, without a button stealing capture.
+                checked(send(hwnd, 0x0111, 101 | (1 << 16), 0, 2, 3000, None))
+                require(find_child(hwnd, None, "STATIC", "Project opened."), "captured project open")
+                for msg, wp in ((0x0200, 1), (0x0202, 0)):
+                    checked(send(hwnd, msg, wp, end | (320 << 16), 2, 1000, None))
+                require(control_text(hwnd, 111) == "0" and
+                        find_child(hwnd, None, "STATIC", "Project opened."),
+                        "release after project replacement reused stale drag/selection")
+                saved = work / f"replaced-{start}-{end}.vid"
+                open_file(hwnd, saved.name, 102)
+                require(saved.read_bytes() == intended, "stale drag changed the replacement project")
+                click_track(hwnd, 16)
+                require(control_text(hwnd, 111) == "0" and
+                        find_child(hwnd, None, "STATIC", "Selected cue at tick 0."),
+                        "project replacement retained stale selection")
+            quit_editor(proc, hwnd)
+            log.append("PASS project replacement during capture cancels stationary and moving releases of a nonexistent old cue and a reused valid index; saved replacement bytes unchanged and new selection valid.")
+
+        for suffix, tail in (("unshared", ((4000, 3),)),
+                             ("distant-shared", ((3999, 3), (4000, 4)))):
+            ordinary = work / f"{suffix}.vid"
+            ordinary_bytes = shared_markers(((10, 1), (44, 2), *tail))
+            ordinary.write_bytes(ordinary_bytes)
+            with launch() as (proc, hwnd):
+                open_file(hwnd, ordinary.name, 101)
+                drag(hwnd, 44, 500, span=4025)  # x22 -> x85, no prior selection.
+                saved = work / f"{suffix}-moved.vid"
+                open_file(hwnd, saved.name, 102)
+                require(saved.read_bytes() == shared_markers(((44, 2), (503, 1), *tail)),
+                        f"{suffix}: ordinary x22 drag did not retain base's first x17 hit")
+                open_file(hwnd, ordinary.name, 101)
+                click_track(hwnd, 22)
+                require(control_text(hwnd, 111) == "10" and
+                        find_child(hwnd, None, "STATIC", "Selected cue at tick 10."),
+                        f"{suffix}: click and drag targets disagree")
+                selection = work / f"{suffix}-selection.vid"
+                open_file(hwnd, selection.name, 102)
+                require(selection.read_bytes() == ordinary_bytes, "ordinary click changed cue data")
+                quit_editor(proc, hwnd)
+            log.append(f"PASS {suffix}: unshared x17/x22, no-selection x22 -> x85 drag moves tick 10 -> 503 exactly as base; click selects the same first hit and saves unchanged bytes.")
+
+        with launch() as (proc, hwnd):
             open_file(hwnd, crowded.name, 101)
             # At span 4025, three starts paint at x=17; tick 44 paints at x=22.
             for tick in (10, 11, 12, 10):
@@ -276,8 +325,20 @@ def exercise(exe, digest, work, out):
             require(control_text(hwnd, 111) == "44", "did not choose the nearer right marker")
             click_track(hwnd, 19)
             require(control_text(hwnd, 111) == "10", "nearby selection stole the nearer left marker")
+            click_track(hwnd, 17)
+            require(control_text(hwnd, 111) == "11", "selection before short no-op drag")
+            drag(hwnd, 44, 51, span=4025)  # x22 -> x23 stays in the two-pixel no-move zone.
+            require(control_text(hwnd, 111) == "44" and
+                    find_child(hwnd, None, "STATIC", "Selected cue at tick 44."),
+                    "short no-op drag left contradictory selected-tick status")
+            short = work / "short-drag.vid"
+            open_file(hwnd, short.name, 102)
+            require(short.read_bytes() == original, "short no-op drag changed saved cue data")
+            click_track(hwnd, 17)
+            drag(hwnd, 44, 51, span=4025)
             quit_editor(proc, hwnd)  # Selection alone must not prompt to discard changes.
             log.append("PASS span 4025: x17 cycles 10 -> 11 -> 12 -> 10 excluding tick 44 at x22; nearest hits, both hit-area edges, outside seeks clear selection status, byte-exact selection save and clean close.")
+            log.append("PASS short no-op x22 -> x23 drag selects tick 44 with matching tick/status, unchanged saved bytes and clean close.")
 
         with launch() as (proc, hwnd):
             open_file(hwnd, crowded.name, 101)

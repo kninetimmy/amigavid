@@ -286,6 +286,9 @@ static void open_project(void)
             error(problem);
         return;
     }
+    dragging = selected = -1;
+    if (GetCapture() == window)
+        ReleaseCapture();
     free_document(doc);
     doc = candidate;
     strcpy(doc->name, name);
@@ -293,7 +296,6 @@ static void open_project(void)
     for (i = 0; i < doc->project.screens; ++i)
         list_picture(i);
     tick = 0;
-    selected = -1;
     painted = dirty = 0;
     message(paired ? "Project opened. Two-picture screens preview their first image." : "Project opened.");
     refresh();
@@ -430,7 +432,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     unsigned i, changed;
     unsigned long next;
     struct vc_cue cue;
-    int x, y, distance, closest;
+    int x, y, distance, closest, nearest, shared;
     char label[64];
     BOOL ok;
 
@@ -490,16 +492,26 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         stop();
         dragging = -1;
         closest = 6;
-        /* Hit the nearest marker; equal distances keep timeline order. */
+        nearest = -1;
+        shared = 0;
+        /* Keep the first hit unless this hit window contains a shared pixel. */
         for (i = 0; i < doc->project.cues; ++i) {
             distance = abs(x - to_x(doc->project.cue[i].tick));
+            if (distance > 5)
+                continue;
+            if (dragging < 0)
+                dragging = (int)i;
+            if (i && to_x(doc->project.cue[i - 1].tick) == to_x(doc->project.cue[i].tick))
+                shared = 1;
             if (distance < closest) {
                 closest = distance;
-                dragging = (int)i;
+                nearest = (int)i;
             }
         }
+        if (shared)
+            dragging = nearest;  /* Equal distances keep timeline order. */
         if (dragging >= 0) {
-            if (selected >= 0 &&
+            if (selected >= 0 && (unsigned)selected < doc->project.cues &&
                 to_x(doc->project.cue[selected].tick) == to_x(doc->project.cue[dragging].tick))
                 dragging = selected;
             drag_start_x = drag_x = x;
@@ -530,6 +542,10 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             i = (unsigned)dragging;
             dragging = -1;
             ReleaseCapture();
+            if (i >= doc->project.cues) {
+                selected = -1;
+                return 0;
+            }
             cue = doc->project.cue[i];
             x = (short)LOWORD(lp);
             if (!drag_moved && x == drag_start_x) {
@@ -543,8 +559,6 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     cue = doc->project.cue[i];
                 }
                 next = cue.tick;
-                wsprintfA(label, "Selected cue at tick %lu.", next);
-                message(label);
             } else {
                 next = to_tick(x);
                 if (abs(x - to_x(cue.tick)) <= 2)
@@ -562,6 +576,9 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                     message("Cue overlaps another effect or the end of the timeline.");
                     next = doc->project.cue[i].tick;
                 }
+            } else {
+                wsprintfA(label, "Selected cue at tick %lu.", next);
+                message(label);
             }
             selected = (int)i;
             tick = next;

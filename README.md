@@ -209,14 +209,18 @@ pictures to that folder first. It must be on local FAT on Windows 98.
    Move the file together with its pictures to play on another PC.
 
 When cue starts share a marker pixel, successive clicks without dragging
-select their cues in timeline order and wrap to the first. The nearest
-marker within five pixels is hit; equal-distance ties use timeline order,
-not the prior selection. The tick box and status identify
+select their cues in timeline order and wrap to the first. If the five-pixel
+hit window contains a shared marker, the nearest marker is hit;
+equal-distance ties use timeline order, not the prior selection. Otherwise,
+clicks and drags keep the first cue in timeline order within five pixels,
+even if another marker is nearer. A distant shared marker has no effect.
+The tick box and status identify
 the selected cue's start tick. Selection alone does not change saved cue
 data. Drag from the marker to move that selected cue; a drag without prior
 selection still moves the first cue at that marker. Selection at a different
-marker does not redirect the drag. Clicking empty track clears selection
-and seeks.
+marker does not redirect the drag. A short drag that leaves a cue in place
+still selects it. Clicking empty track clears selection and seeks. Opening
+another project cancels any pending drag and clears selection.
 
 Use a workspace you control; don't edit its files in another program during
 a save. Project filenames are ASCII leaves ending in `.vid`; new picture

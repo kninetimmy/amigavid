@@ -524,13 +524,12 @@ those disks were not booted again for this re-verification.
   no Windows 98/XP guest, physical target or original Amiga-reader run
   was performed for this correction.
 
-**Ordinary-drag and captured-open review correction (issue #20):**
+**Ordinary-drag and captured-open review correction (issue #20; refined below):**
 
 - The previous nearest-hit rule changed ordinary drags on distinct marker
-  pixels. Clicks and drags now retain the base's first hit in timeline order
-  unless the five-pixel hit window itself contains co-located cues. Only
-  then does nearest-pixel disambiguation apply; distant shared groups cannot
-  change the target. Existing shared-marker cycles and neighbor cases pass.
+  pixels. This revision retained the base's first hit unless the five-pixel
+  window contained co-located cues. Distant shared groups had no effect,
+  but an unrelated shared pixel inside the window could still change the hit.
 - Before the fix, the expanded native smoke reproduced replacement during
   mouse capture: exit 1, `release after project replacement reused stale
   drag/selection`, retained in `.editor/ISSUE20-CYCLE2-BASELINE.txt`.
@@ -558,6 +557,35 @@ those disks were not booted again for this re-verification.
   current. Only the modern host was exercised, not Windows 98/XP guests,
   physical target hardware or the original Amiga reader.
 
+**Candidate-pixel and tick-field review correction (issue #20):**
+
+- Clicks and drags keep the legacy first hit unless that candidate or the
+  nearest candidate shares its exact pixel. Only then does the nearest
+  candidate win, with ties kept in timeline order. Selection refreshes the
+  tick box even when the selected tick already equals the playhead.
+- The new smoke cases failed separately on `2f9baf0` (exit 1): selecting
+  tick 10 left `999` in the tick box, and the x22 → x85 drag failed to
+  move only tick 10 to 503 with an unrelated shared x27 marker. Logs:
+  `.editor/ISSUE20-CYCLE3-base-tick.txt` and `-base-drag.txt`.
+- `python tools/editor.py build`, `python tools/editor.py test` and
+  `python tools/editor.py smoke` all passed locally (exit 0), not in CI.
+  Windows 11 Pro x64 26300.9974, NTFS, Python 3.14.4, GCC 16.1.0.
+  The Watcom pin, PE profile and imports are unchanged. `VCEDIT.EXE`
+  SHA-256 `edf2f03587c8a2c24b3a5f4a3dcc377e9bb7c9d143bf993fecfe47a79af5066a`.
+- Smoke compared exact saved VC10 bytes across six layouts: unshared
+  candidates (no, distant, or incidental shared pixel), shared first
+  candidate, shared nearest candidate, and both shared. It confirmed that
+  typing `999` without submitting leaves it in the edit field, until
+  clicking cue 10 at the existing playhead restores 10 in the field and
+  identifies the cue in status. Shared 10/11/12/10 cycling, the non-first
+  cue move, ties, adjacent markers, capture cancellation and earlier
+  checks still passed.
+- Local command logs: `.editor/ISSUE20-CYCLE3-build.txt`, `-test.txt`
+  and `-smoke.txt`. The full README was reviewed and its gesture and
+  guest-evidence wording updated. The new build was tested only on the
+  modern host, not on Windows 98/XP guests, physical targets, or the
+  original Amiga reader.
+
 ### Guest verification
 
 **First implementation (before review fixes):**
@@ -567,7 +595,8 @@ sound card. Each guest used a fresh qcow2 overlay of the corresponding
 Milestone 2 baseline. On both, `A:\SETUP.BAT` copied `VCEDIT.EXE`,
 `BG.IFF` and `BLUE.16` to `C:\M3EDIT`; `FC /B` found no executable
 differences from the read-only transfer media. Both guests ran
-`C:\M3EDIT\VCEDIT.EXE C:\M3EDIT`, using the executable SHA-256 above.
+`C:\M3EDIT\VCEDIT.EXE C:\M3EDIT` with `VCEDIT.EXE` SHA-256
+`29bcde7bbb6bd1e64c7f95bf693b11f970462835ddab8fe5c68ccecbf08e0196`.
 The artwork bytes match the same two pinned host inputs despite their
 8.3 aliases.
 

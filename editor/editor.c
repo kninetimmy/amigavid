@@ -221,6 +221,35 @@ static unsigned long to_tick(int x)
     return ((unsigned long)(x - GRID_X) * visible_ticks() + GRID_W / 2) / GRID_W;
 }
 
+static int hit_shares_pixel(unsigned i)
+{
+    const struct vc_project *p = &doc->project;
+    /* Both candidates start their pixel group; check the next cue. */
+    return i + 1 < p->cues && to_x(p->cue[i].tick) == to_x(p->cue[i + 1].tick);
+}
+
+static int hit_cue(int x)
+{
+    int first = -1, nearest = -1, closest = 6, distance;
+    unsigned i;
+
+    for (i = 0; i < doc->project.cues; ++i) {
+        distance = abs(x - to_x(doc->project.cue[i].tick));
+        if (distance > 5)
+            continue;
+        if (first < 0)
+            first = (int)i;
+        if (distance < closest) {
+            closest = distance;
+            nearest = (int)i;  /* Equal distances keep timeline order. */
+        }
+    }
+    /* Preserve the legacy target unless one of the two candidates is shared. */
+    if (first != nearest && (hit_shares_pixel(first) || hit_shares_pixel(nearest)))
+        return nearest;
+    return first;
+}
+
 static void list_picture(unsigned index)
 {
     char label[80];
@@ -432,7 +461,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     unsigned i, changed;
     unsigned long next;
     struct vc_cue cue;
-    int x, y, distance, closest, nearest, shared;
+    int x, y;
     char label[64];
     BOOL ok;
 
@@ -490,26 +519,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (y < GRID_Y - 9 || y > GRID_BOTTOM)
             return 0;
         stop();
-        dragging = -1;
-        closest = 6;
-        nearest = -1;
-        shared = 0;
-        /* Keep the first hit unless this hit window contains a shared pixel. */
-        for (i = 0; i < doc->project.cues; ++i) {
-            distance = abs(x - to_x(doc->project.cue[i].tick));
-            if (distance > 5)
-                continue;
-            if (dragging < 0)
-                dragging = (int)i;
-            if (i && to_x(doc->project.cue[i - 1].tick) == to_x(doc->project.cue[i].tick))
-                shared = 1;
-            if (distance < closest) {
-                closest = distance;
-                nearest = (int)i;
-            }
-        }
-        if (shared)
-            dragging = nearest;  /* Equal distances keep timeline order. */
+        dragging = hit_cue(x);
         if (dragging >= 0) {
             if (selected >= 0 && (unsigned)selected < doc->project.cues &&
                 to_x(doc->project.cue[selected].tick) == to_x(doc->project.cue[dragging].tick))
@@ -582,6 +592,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             selected = (int)i;
             tick = next;
+            shown_tick = VC_TICK_MAX + 1;  /* Discard unsubmitted text on selection. */
             refresh();
         }
         return 0;

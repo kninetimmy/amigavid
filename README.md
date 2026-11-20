@@ -209,18 +209,17 @@ pictures to that folder first. It must be on local FAT on Windows 98.
    Move the file together with its pictures to play on another PC.
 
 When cue starts share a marker pixel, successive clicks without dragging
-select their cues in timeline order and wrap to the first. If the five-pixel
-hit window contains a shared marker, the nearest marker is hit;
-equal-distance ties use timeline order, not the prior selection. Otherwise,
-clicks and drags keep the first cue in timeline order within five pixels,
-even if another marker is nearer. A distant shared marker has no effect.
-The tick box and status identify
-the selected cue's start tick. Selection alone does not change saved cue
-data. Drag from the marker to move that selected cue; a drag without prior
-selection still moves the first cue at that marker. Selection at a different
-marker does not redirect the drag. A short drag that leaves a cue in place
-still selects it. Clicking empty track clears selection and seeks. Opening
-another project cancels any pending drag and clears selection.
+select their cues in timeline order and wrap to the first. Within five pixels
+of the pointer, clicks and drags normally use the first marker in timeline
+order. If either that marker or the nearest marker shares a pixel with another
+cue, the nearest marker wins, with ties going to the earlier marker. A shared
+pixel elsewhere does not affect the hit. The tick box and status identify the
+selected cue's start tick, replacing any unsubmitted tick text. Selection
+alone does not change saved cue data. Drag from the marker to move its
+selected cue, or its first cue if none is selected there. A short drag that
+leaves a cue in place still selects it. Clicking empty track clears selection
+and seeks. Opening another project cancels any pending drag and clears
+selection.
 
 Use a workspace you control; don't edit its files in another program during
 a save. Project filenames are ASCII leaves ending in `.vid`; new picture
@@ -274,16 +273,16 @@ not a power-loss guarantee for FAT.
 
 Before milestone 3, the PRD's first useful demo was a goal: open real
 editor artwork on Windows 98, add two pictures and a timed transition, save
-the project, and play that file on XP with the same executable. The
-fixed editor passes on Windows 98 SE and x86 XP Professional SP3
-QEMU guests using a 98 save that references a filename with `~`. The
+the project, and play that file on XP with the same executable. Earlier
+corrected builds passed on Windows 98 SE and x86 XP Professional SP3 QEMU
+guests using a 98 save that references a filename with `~`. The
 named-stream fix repeated the same-file demo and verified ordinary NTFS
 replacement on XP. The earlier 98 FAT32 run also checked successful
 replacement, rejection of a true short alias, and preservation of a
-preexisting backup. The
-[milestone 3 evidence](PROGRESS.md#milestone-3--two-picture-editor) separates
-host and guest results. The original Amiga reader and physical hardware
-are not verified.
+preexisting backup. Shared-marker selection (#20) was tested on Windows 11,
+not in those guests. The [milestone 3 evidence](PROGRESS.md#milestone-3--two-picture-editor)
+separates host and guest results. The original Amiga reader and physical
+hardware are not verified.
 
 Release acceptance is stricter: the same portable ZIP must pass the edit,
 save, reopen and playback workflow on both Windows families. A modern-host

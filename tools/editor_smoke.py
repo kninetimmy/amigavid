@@ -273,31 +273,46 @@ def exercise(exe, digest, work, out):
             quit_editor(proc, hwnd)
             log.append("PASS project replacement during capture cancels stationary and moving releases of a nonexistent old cue and a reused valid index; saved replacement bytes unchanged and new selection valid.")
 
-        for suffix, tail in (("unshared", ((4000, 3),)),
-                             ("distant-shared", ((3999, 3), (4000, 4)))):
-            ordinary = work / f"{suffix}.vid"
-            ordinary_bytes = shared_markers(((10, 1), (44, 2), *tail))
-            ordinary.write_bytes(ordinary_bytes)
+        # Span 4025: x17 and x22 are first and nearest; x27 is in range but neither.
+        for layout, ticks, target in (
+            ("unshared", (10, 44, 4000), 10),
+            ("distant-shared", (10, 44, 3999, 4000), 10),
+            ("incidental-shared", (10, 44, 81, 82, 4000), 10),
+            ("first-shared", (10, 11, 44, 4000), 44),
+            ("nearest-shared", (10, 44, 45, 4000), 44),
+            ("both-shared", (10, 11, 44, 45, 4000), 44),
+        ):
+            layout_file = work / f"{layout}.vid"
+            cues = tuple((tick, identity) for identity, tick in enumerate(ticks, 1))
+            layout_bytes = shared_markers(cues)
+            layout_file.write_bytes(layout_bytes)
             with launch() as (proc, hwnd):
-                open_file(hwnd, ordinary.name, 101)
+                open_file(hwnd, layout_file.name, 101)
                 drag(hwnd, 44, 500, span=4025)  # x22 -> x85, no prior selection.
-                saved = work / f"{suffix}-moved.vid"
+                expected = sorted((503 if tick == target else tick, identity) for tick, identity in cues)
+                saved = work / f"{layout}-moved.vid"
                 open_file(hwnd, saved.name, 102)
-                require(saved.read_bytes() == shared_markers(((44, 2), (503, 1), *tail)),
-                        f"{suffix}: ordinary x22 drag did not retain base's first x17 hit")
-                open_file(hwnd, ordinary.name, 101)
+                require(saved.read_bytes() == shared_markers(expected),
+                        f"{layout}: x22 drag did not move only tick {target} to 503")
+                open_file(hwnd, layout_file.name, 101)
                 click_track(hwnd, 22)
-                require(control_text(hwnd, 111) == "10" and
-                        find_child(hwnd, None, "STATIC", "Selected cue at tick 10."),
-                        f"{suffix}: click and drag targets disagree")
-                selection = work / f"{suffix}-selection.vid"
+                require(control_text(hwnd, 111) == str(target) and
+                        find_child(hwnd, None, "STATIC", f"Selected cue at tick {target}."),
+                        f"{layout}: x22 click did not select tick {target}")
+                selection = work / f"{layout}-selection.vid"
                 open_file(hwnd, selection.name, 102)
-                require(selection.read_bytes() == ordinary_bytes, "ordinary click changed cue data")
+                require(selection.read_bytes() == layout_bytes, f"{layout}: click changed cue data")
                 quit_editor(proc, hwnd)
-            log.append(f"PASS {suffix}: unshared x17/x22, no-selection x22 -> x85 drag moves tick 10 -> 503 exactly as base; click selects the same first hit and saves unchanged bytes.")
+            log.append(f"PASS {layout}: x22 -> x85 drag moves only tick {target} -> 503; x22 click selects tick {target} and saves unchanged bytes.")
 
         with launch() as (proc, hwnd):
             open_file(hwnd, crowded.name, 101)
+            seek(hwnd, 10)
+            require(control_text(hwnd, 111) == "10", "seek did not set the selection test's playhead")
+            edit(hwnd, 111, "")
+            for digit in "999":
+                checked(send(get_child(hwnd, 111), 0x0102, ord(digit), 1, 2, 1000, None))
+            require(control_text(hwnd, 111) == "999", "unsubmitted tick typing did not stick")
             # At span 4025, three starts paint at x=17; tick 44 paints at x=22.
             for tick in (10, 11, 12, 10):
                 click_track(hwnd, 17)
@@ -338,6 +353,7 @@ def exercise(exe, digest, work, out):
             drag(hwnd, 44, 51, span=4025)
             quit_editor(proc, hwnd)  # Selection alone must not prompt to discard changes.
             log.append("PASS span 4025: x17 cycles 10 -> 11 -> 12 -> 10 excluding tick 44 at x22; nearest hits, both hit-area edges, outside seeks clear selection status, byte-exact selection save and clean close.")
+            log.append("PASS typing 999 leaves it unsubmitted; selecting cue 10 at the existing playhead replaces it with 10 and reports the selected tick.")
             log.append("PASS short no-op x22 -> x23 drag selects tick 44 with matching tick/status, unchanged saved bytes and clean close.")
 
         with launch() as (proc, hwnd):

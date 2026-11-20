@@ -1,4 +1,5 @@
 #include "local.h"
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include "vc10.h"
@@ -21,9 +22,27 @@ struct nt_attributes {
     PVOID security, qos;
 };
 struct nt_status { union { LONG status; PVOID pointer; } result; ULONG_PTR information; };
+struct nt_rename {
+    BOOLEAN replace;
+    HANDLE parent;
+    ULONG bytes;
+    WCHAR name[VC_NAME + 4];
+};
 typedef LONG (WINAPI *nt_open_fn)(HANDLE *, ACCESS_MASK, struct nt_attributes *,
-                                 struct nt_status *, ULONG, ULONG);
+                                  struct nt_status *, ULONG, ULONG);
+typedef LONG (WINAPI *nt_create_fn)(HANDLE *, ACCESS_MASK, struct nt_attributes *,
+                                    struct nt_status *, LARGE_INTEGER *, ULONG,
+                                    ULONG, ULONG, ULONG, PVOID, ULONG);
+typedef LONG (WINAPI *nt_set_fn)(HANDLE, struct nt_status *, PVOID, ULONG, ULONG);
 static nt_open_fn nt_open_file;
+static nt_create_fn nt_create_file;
+static nt_set_fn nt_set_file;
+
+#define NT_OPEN_CHECKED (0x200000 | 0x20) /* OPEN_REPARSE_POINT | SYNCHRONOUS_IO_NONALERT */
+#define NT_NAME_MISSING ((LONG)0xc0000034UL)
+#define NT_NAME_COLLISION ((LONG)0xc0000035UL)
+#define NT_RENAME 10                     /* FileRenameInformation */
+#define NT_DISPOSITION 13                /* FileDispositionInformation */
 
 static void close_to(unsigned keep)
 {
@@ -36,6 +55,17 @@ void local_close(void)
     close_to(0);
 }
 
+static void nt_name_at(struct nt_attributes *attrs, struct nt_name *name,
+                       HANDLE parent, WCHAR *text, unsigned length)
+{
+    name->length = name->capacity = (USHORT)(length * sizeof(WCHAR));
+    name->text = text;
+    attrs->length = sizeof(*attrs);
+    attrs->parent = parent;
+    attrs->name = name;
+    attrs->flags = 0x40;     /* OBJ_CASE_INSENSITIVE */
+}
+
 static HANDLE open_nt(HANDLE parent, WCHAR *text, unsigned length, int directory)
 {
     struct nt_name name;
@@ -43,25 +73,21 @@ static HANDLE open_nt(HANDLE parent, WCHAR *text, unsigned length, int directory
     struct nt_status io;
     HANDLE file;
 
-    name.length = name.capacity = (USHORT)(length * sizeof(WCHAR));
-    name.text = text;
-    attrs.length = sizeof(attrs);
-    attrs.parent = parent;
-    attrs.name = &name;
-    attrs.flags = 0x40;     /* OBJ_CASE_INSENSITIVE */
+    nt_name_at(&attrs, &name, parent, text, length);
     if (nt_open_file(&file, directory ? FILE_LIST_DIRECTORY | FILE_READ_ATTRIBUTES |
-                     SYNCHRONIZE : FILE_GENERIC_READ, &attrs, &io,
-                     directory ? FILE_SHARE_READ | FILE_SHARE_WRITE : FILE_SHARE_READ,
-                     0x200000 | 0x20) != 0)     /* OPEN_REPARSE_POINT | SYNCHRONOUS_IO_NONALERT */
+                      SYNCHRONIZE : FILE_GENERIC_READ, &attrs, &io,
+                      directory ? FILE_SHARE_READ | FILE_SHARE_WRITE : FILE_SHARE_READ,
+                      NT_OPEN_CHECKED) != 0)
         return INVALID_HANDLE_VALUE;
     return file;
 }
 
-static int ordinary(HANDLE handle, int directory)
+static int ordinary(HANDLE handle, int directory, DWORD extra_forbidden)
 {
     BY_HANDLE_FILE_INFORMATION info;
     return GetFileType(handle) == FILE_TYPE_DISK && GetFileInformationByHandle(handle, &info) &&
-           (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT))
+           (info.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT |
+                                     extra_forbidden))
            == (directory ? FILE_ATTRIBUTE_DIRECTORY : 0) && (directory || info.nNumberOfLinks == 1);
 }
 
@@ -70,7 +96,7 @@ static int hold_dir(HANDLE dir)
     if (dir == INVALID_HANDLE_VALUE)
         return 0;
     held[depth++] = dir;
-    return ordinary(dir, 1);
+    return ordinary(dir, 1, 0);
 }
 
 /* Resolve directly mapped drive root, then hold each checked parent. */
@@ -171,6 +197,8 @@ const char *local_init(const char *argument)
         next = root + 3;
         ntdll = GetModuleHandleA("ntdll.dll");
         nt_open_file = ntdll ? (nt_open_fn)GetProcAddress(ntdll, "NtOpenFile") : NULL;
+        nt_create_file = ntdll ? (nt_create_fn)GetProcAddress(ntdll, "NtCreateFile") : NULL;
+        nt_set_file = ntdll ? (nt_set_fn)GetProcAddress(ntdll, "NtSetInformationFile") : NULL;
         if (!nt_open_file || !hold_root(drive) || !hold_path(&next, '\\')) {
             local_close();
             return "Cannot pin an ordinary workspace folder (links are not supported).";
@@ -206,7 +234,7 @@ static const char *open_read(const char *relative, HANDLE *file)
     }
     if (*file == INVALID_HANDLE_VALUE)
         return "Cannot open local file.";
-    if (fat9x ? GetFileType(*file) != FILE_TYPE_DISK : !ordinary(*file, 0)) {
+    if (fat9x ? GetFileType(*file) != FILE_TYPE_DISK : !ordinary(*file, 0, 0)) {
         CloseHandle(*file);
         return "File must be an ordinary local file, not a directory or link.";
     }
@@ -237,11 +265,128 @@ const char *local_read(const char *relative, DWORD limit, char **data, DWORD *si
     return error;
 }
 
-const char *local_save(const char *leaf, const char *data, DWORD size, int replace)
+/* NT mutations use the held workspace, not the launch-time drive spelling.
+   Open existing entries without following links and keep the exact file
+   handles through rename, rollback and delete. No replace-by-name flags. */
+static LONG save_open_nt(HANDLE *file, const char *leaf, ACCESS_MASK access, ULONG share, int create)
+{
+    WCHAR wide[VC_NAME + 4];
+    struct nt_attributes attrs = { 0 };
+    struct nt_name name;
+    struct nt_status io;
+    unsigned n;
+
+    for (n = 0; leaf[n]; ++n)
+        wide[n] = (unsigned char)leaf[n];
+    nt_name_at(&attrs, &name, held[depth - 1], wide, n);
+    if (create)
+        return nt_create_file(file, access, &attrs, &io, NULL, FILE_ATTRIBUTE_NORMAL, share,
+                              2, NT_OPEN_CHECKED | 0x40, NULL, 0); /* FILE_CREATE | NON_DIRECTORY_FILE */
+    return nt_open_file(file, access, &attrs, &io, share, NT_OPEN_CHECKED);
+}
+
+static LONG rename_nt(HANDLE file, const char *leaf)
+{
+    struct nt_rename rename = { 0 };
+    struct nt_status io;
+    unsigned n;
+
+    rename.parent = held[depth - 1];
+    for (n = 0; leaf[n]; ++n)
+        rename.name[n] = (unsigned char)leaf[n];
+    rename.bytes = n * sizeof(WCHAR);
+    return nt_set_file(file, &io, &rename, offsetof(struct nt_rename, name) +
+                       rename.bytes + sizeof(WCHAR), NT_RENAME);
+}
+
+static LONG delete_nt(HANDLE file)
+{
+    struct nt_status io;
+    BOOLEAN yes = TRUE;
+
+    return nt_set_file(file, &io, &yes, sizeof(yes), NT_DISPOSITION);
+}
+
+static const char backup_exists[] = "Backup already exists or cannot be checked. Inspect the .bak file first.";
+static const char backup_retained[] =
+    "Saved, but could not remove the previous project .bak. Inspect it before saving again.";
+static const char recovery[] = "Save failed. Previous project is recoverable as .bak.";
+static const char exists[] = "That filename exists. Open that project to replace it, or use a new name.";
+static const char bad_destination[] = "Save destination is not an ordinary writable file.";
+
+static int write_staged(HANDLE file, const char *data, DWORD size)
+{
+    DWORD wrote;
+    return WriteFile(file, data, size, &wrote, NULL) && wrote == size && FlushFileBuffers(file);
+}
+
+static const char *save_nt(const char *leaf, const char *data, DWORD size, int replace, int *published)
+{
+    char backup[VC_NAME + 4], temp[VC_NAME];
+    HANDLE prior = INVALID_HANDLE_VALUE, staged, probe;
+    LONG status;
+    unsigned i;
+    const char *error;
+
+    if (!depth || !nt_create_file || !nt_set_file)
+        return "Handle-relative workspace writes are unavailable.";
+    wsprintfA(backup, "%s.bak", leaf);
+    status = save_open_nt(&probe, backup, FILE_READ_ATTRIBUTES | SYNCHRONIZE,
+                          FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, 0);
+    if (status == 0)
+        CloseHandle(probe);
+    if (status != NT_NAME_MISSING)
+        return backup_exists;
+
+    status = save_open_nt(&prior, leaf, replace ? FILE_GENERIC_READ | DELETE :
+                          FILE_READ_ATTRIBUTES | SYNCHRONIZE, FILE_SHARE_READ, 0);
+    if (status == NT_NAME_MISSING) {
+        prior = INVALID_HANDLE_VALUE;
+    } else if (status != 0) {
+        return replace ? "Cannot back up previous project; it was not replaced." :
+                         "Cannot check save destination.";
+    } else if (!replace || !ordinary(prior, 0, FILE_ATTRIBUTE_READONLY)) {
+        CloseHandle(prior);
+        return replace ? bad_destination : exists;
+    }
+
+    for (i = 0; i < 100; ++i) {
+        wsprintfA(temp, "VC%08lX-%u.tmp", GetCurrentProcessId(), i);
+        status = save_open_nt(&staged, temp, FILE_GENERIC_WRITE | DELETE, 0, 1);
+        if (status != NT_NAME_COLLISION)
+            break;
+    }
+    if (status != 0) {
+        error = "Cannot create a new staging file.";
+    } else {
+        if (!write_staged(staged, data, size)) {
+            error = "Cannot write and flush staged project; previous file was not moved.";
+        } else if (prior != INVALID_HANDLE_VALUE && rename_nt(prior, backup) != 0) {
+            error = "Cannot back up previous project; it was not replaced.";
+        } else if (rename_nt(staged, leaf) != 0) {
+            if (prior != INVALID_HANDLE_VALUE)
+                error = rename_nt(prior, leaf) == 0 ?
+                    "Cannot publish staged project; previous file was restored." : recovery;
+            else
+                error = "Cannot publish staged project.";
+        } else {
+            *published = 1;
+            error = prior != INVALID_HANDLE_VALUE && delete_nt(prior) != 0 ? backup_retained : NULL;
+        }
+        if (!*published)
+            delete_nt(staged);
+        CloseHandle(staged);
+    }
+    if (prior != INVALID_HANDLE_VALUE)
+        CloseHandle(prior);
+    return error;
+}
+
+static const char *save_fat(const char *leaf, const char *data, DWORD size, int replace, int *published)
 {
     char path[MAX_PATH], backup[MAX_PATH], temp[MAX_PATH];
     HANDLE file;
-    DWORD attr, wrote;
+    DWORD attr;
     int ok, had_project;
     unsigned i;
     const char *error;
@@ -252,16 +397,16 @@ const char *local_save(const char *leaf, const char *data, DWORD size, int repla
     strcat(backup, ".bak");
     attr = GetFileAttributesA(backup);
     if (attr != INVALID_FILE_ATTRIBUTES || GetLastError() != ERROR_FILE_NOT_FOUND)
-        return "Backup already exists or cannot be checked. Inspect the .bak file first.";
+        return backup_exists;
     attr = GetFileAttributesA(path);
     had_project = attr != INVALID_FILE_ATTRIBUTES;
     if (!had_project && GetLastError() != ERROR_FILE_NOT_FOUND)
         return "Cannot check save destination.";
     if (had_project) {
         if (!replace)
-            return "That filename exists. Open that project to replace it, or use a new name.";
+            return exists;
         if (attr & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_READONLY))
-            return "Save destination is not an ordinary writable file.";
+            return bad_destination;
         error = open_read(leaf, &file);
         if (error)
             return error;
@@ -275,7 +420,7 @@ const char *local_save(const char *leaf, const char *data, DWORD size, int repla
     }
     if (file == INVALID_HANDLE_VALUE)
         return "Cannot create a new staging file.";
-    ok = WriteFile(file, data, size, &wrote, NULL) && wrote == size && FlushFileBuffers(file);
+    ok = write_staged(file, data, size);
     if (!CloseHandle(file) || !ok) {
         DeleteFileA(temp);
         return "Cannot write and flush staged project; previous file was not moved.";
@@ -291,11 +436,21 @@ const char *local_save(const char *leaf, const char *data, DWORD size, int repla
         static char detail[128];
         DeleteFileA(temp);
         if (had_project && !MoveFileA(backup, path))
-            return "Save failed. Previous project is recoverable as .bak.";
-        wsprintfA(detail, "Cannot publish staged project (Windows error %lu); previous file was preserved.", code);
+            return recovery;
+        wsprintfA(detail, "Cannot publish staged project (Windows error %lu).", code);
         return detail;
     }
+    *published = 1;
     if (had_project && !DeleteFileA(backup))
-        return "Saved, but could not remove the previous project .bak. Inspect it before saving again.";
+        return backup_retained;
     return NULL;
+}
+
+const char *local_save(const char *leaf, const char *data, DWORD size, int replace, int *published)
+{
+    *published = 0;
+    if (vc_picture_path(leaf) != leaf || strchr(leaf, '/'))
+        return "Save destination must be an ordinary workspace filename.";
+    return fat9x ? save_fat(leaf, data, size, replace, published) :
+                   save_nt(leaf, data, size, replace, published);
 }

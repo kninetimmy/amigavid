@@ -182,7 +182,9 @@ def exercise(exe, digest, work, out):
         command(hwnd, button, modal)
 
     log = [platform.platform(), f"{digest}  {exe.name}"]
-    intended = authored(*NAMES, 50, 19)
+    names = "BG~1.IFF", NAMES[1]
+    (work / names[0]).write_bytes((work / NAMES[0]).read_bytes())
+    intended = authored(*names, 50, 19)
     project = work / "sequence.vid"
     fixture = work / "fixture.vid"
     (work / "Sub").mkdir()
@@ -196,7 +198,7 @@ def exercise(exe, digest, work, out):
         (work / "extra.iff").write_bytes((work / NAMES[0]).read_bytes())
         (work / "hard.iff").hardlink_to(work / "extra.iff")
         with launch() as (proc, hwnd):
-            open_file(hwnd, NAMES[0], 100)
+            open_file(hwnd, names[0], 100)
             command(hwnd, 103)
             # Capture both original images independently of the transition.
             first = capture(proc, hwnd, 0, FIXTURE_PINS[0][2])
@@ -205,7 +207,7 @@ def exercise(exe, digest, work, out):
             command(hwnd, 104)
             drag(hwnd, 25, 50)
             second = capture(proc, hwnd, 79, FIXTURE_PINS[1][2])
-            log.append("PASS loaded both pinned ILBMs and authored two cues via buttons and a 25 -> 50 drag.")
+            log.append("PASS loaded both pinned ILBMs (including BG~1.IFF) and authored two cues via buttons and a 25 -> 50 drag.")
             checks = {}
             for tick, split in ((0, 256), (49, 256), (50, 241), (58, 129), (67, 3), (68, 0), (79, 0)):
                 expected = first[:split * 960] + second[:(256 - split) * 960]
@@ -242,8 +244,16 @@ def exercise(exe, digest, work, out):
             capture(proc, hwnd, 58, checks[58])
             log.append("PASS full frame comparison after process restart, timed Play, invalid/missing project and NT link rejection.")
             drag(hwnd, 50, 60)
-            # Share reads and writes, but not deletion: staging can succeed,
-            # then MoveFile of the previous project must fail.
+            alias = work / "save-alias.vid"
+            alias.hardlink_to(project)
+            try:
+                open_file(hwnd, project.name, 102, modal=True)
+                dialog(proc, "not an ordinary writable file")
+                require(alias.read_bytes() == intended and project.read_bytes() == intended,
+                        "failed replacement changed multiply-linked project")
+            finally:
+                alias.unlink()
+            # Share reads and writes, but not deletion: replacement must refuse.
             handle = lock(str(project), 0x80000000, 3, None, 3, 0, None)
             require(handle not in (None, ct.c_void_p(-1).value), "could not lock project")
             try:
@@ -253,7 +263,7 @@ def exercise(exe, digest, work, out):
             finally:
                 checked(close_handle(handle))
             open_file(hwnd, project.name, 102)
-            updated = authored(*NAMES, 60, 19)
+            updated = authored(*names, 60, 19)
             until(proc, lambda: project.exists() and project.read_bytes() == updated,
                   "successful replacement after unlock")
             sync(hwnd)
@@ -267,7 +277,7 @@ def exercise(exe, digest, work, out):
                     "retry must not consume an interrupted save's backup")
             backup.rename(project)
             quit_editor(proc, hwnd)
-            log.append("PASS locked replacement preserved original bytes; unlocked retry succeeded and cleaned staging.")
+            log.append("PASS multiply-linked and locked replacements preserved original bytes; eligible retry cleaned staging.")
             log.append("PASS simulated interrupted replacement: retry left the prior .bak intact for manual recovery.")
     log.append(f"First save SHA-256: {sha(intended)}")
     (out / "HOST-SMOKE.txt").write_text("\n".join(log) + "\n", encoding="utf-8")

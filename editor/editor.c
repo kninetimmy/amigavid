@@ -300,7 +300,8 @@ static void open_project(void)
 static void save_project(void)
 {
     char name[VC_NAME], *data;
-    const char *problem;
+    const char *notice;
+    int published;
     if (!doc->project.cues) {
         error("Add a cue before saving.");
         return;
@@ -313,16 +314,18 @@ static void save_project(void)
         error("Not enough memory to stage project.");
         return;
     }
-    problem = local_save(name, data, (DWORD)vc_write(&doc->project, data),
-                         lstrcmpiA(doc->name, name) == 0);
+    notice = local_save(name, data, (DWORD)vc_write(&doc->project, data),
+                        lstrcmpiA(doc->name, name) == 0, &published);
     free(data);
-    if (problem) {
-        error(problem);
+    if (!published) {
+        error(notice);
         return;
     }
     strcpy(doc->name, name);
     dirty = 0;
-    message("Project saved.");
+    message(notice ? "Project saved; .bak retained." : "Project saved.");
+    if (notice)
+        MessageBoxA(window, notice, TITLE, MB_OK | MB_ICONWARNING);
 }
 
 static void open_picture(void)

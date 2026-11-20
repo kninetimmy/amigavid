@@ -78,6 +78,8 @@ FIXTURE = HDR + (
     b"50\n2\n7\n19\n2\n3\n4\n5\n0\nTubs!Mjhiu\n"
     b"80\n1\n8\n0\n0\n0\n0\n0\n0\nNOTEXT\n"
 )
+TILDE_FIXTURE = (FIXTURE.replace(b"WDQjdt;Xbsn!Bsu/jgg", b"WDQjdt;XBSN\x7f2/JGG")
+                 .replace(b"Tubs!Mjhiu", b"Tubs!Mjhiu\x7f"))
 
 
 def test():
@@ -108,6 +110,11 @@ def test():
                 67: (6, 7, 3), 68: (7, 0, 256), 69: (7, 0, 256), 80: (8, 0, 256),
             }, "source-derived cut/slide frame geometry")
         print("PASS active LF/CRLF fixture: two ordinary screens and one pair, byte-exact LF output, frame geometry")
+        for data in (TILDE_FIXTURE, TILDE_FIXTURE.replace(b"\n", b"\r\n")):
+            result = parse(data)
+            require(result.returncode == 0 and output.read_bytes() == TILDE_FIXTURE,
+                    f"shifted '~' in WARM~1.IFF (ordinary and paired) and Star Light~: {result.stdout}")
+        print("PASS active LF/CRLF fixture: shifted '~' in short-style picture name and effect text")
         rejects = [
             ("UTF-8 header", FIXTURE.replace(b"\xa9", b"\xc2\xa9")),
             ("old-style fields", HDR + b"7\nVCPics:fake.16\n0\n"),
@@ -124,6 +131,7 @@ def test():
             ("vector", FIXTURE.replace(b"\n0\n0\n0\n3\n", b"\n1\n0\n0\n3\n", 1)),
             ("object ref", FIXTURE.replace(b"\n5\n0\nTubs", b"\n5\n1\nTubs")),
             ("bad text byte", FIXTURE.replace(b"Tubs!Mjhiu", b"Tubs Mjhiu")),
+            ("bad filename byte", TILDE_FIXTURE.replace(b"\x7f2/JGG", b"\x802/JGG")),
             ("bad duration", FIXTURE.replace(b"\n19\n2\n", b"\n0\n2\n")),
             ("overlap", FIXTURE.replace(b"\n80\n1\n8\n", b"\n51\n1\n8\n")),
             ("out of order", FIXTURE.replace(b"\n80\n1\n8\n", b"\n1\n1\n8\n")),
@@ -135,6 +143,24 @@ def test():
         for name, data in rejects:
             require(parse(data).returncode == 1, f"malformed VC10 accepted: {name}")
         print(f"PASS {len(rejects)} malformed, unsupported and unsafe reference cases")
+
+        # Same native routines as the GUI, with fault injection only in this driver.
+        local_driver = work / "local.exe"
+        run(Path(compiler), "-Wall", "-Wextra", "-Werror", "-Wno-cast-function-type",
+            *(str(ROOT / "editor" / name) for name in ("local_test.c", "vc10.c")),
+            "-o", str(local_driver), "-luser32", cwd=work, env=None)
+        pinned, alternate = work / "pinned", work / "alternate"
+        pinned.mkdir()
+        alternate.mkdir()
+        (alternate / "test.vid").write_bytes(b"untouched outside the pinned workspace")
+        run(local_driver, pinned, alternate, cwd=work, env=None)
+        require({p.name: p.read_bytes() for p in pinned.iterdir()} ==
+                {"test.vid.bak": b"old", "warning.vid": b"new", "warning.vid.bak": b"old"},
+                "wrong pinned files after controlled failures (including staging cleanup)")
+        require({p.name: p.read_bytes() for p in alternate.iterdir()} ==
+                {"test.vid": b"untouched outside the pinned workspace"},
+                "save touched the alternate scratch directory")
+        print("PASS NT pinned saves despite synthetic path change; publish failure, rollback, retained backups and cleanup warning")
 
 
 def require(condition, message):

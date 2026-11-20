@@ -350,8 +350,15 @@ those disks were not booted again for this re-verification.
   cues. None of its seven referenced paths exists in the pinned ZIP;
   the active parser rejects the historical fields rather than ignoring
   them.
+- **Shifted byte correction:** the first port's reader rejected `0x7f`
+  even though the original `+1` writer produces it for `~`. The active
+  reader now decodes it as `~` in both names of every screen and in text
+  on both supported effects. Filename, line and field bounds, other
+  invalid-byte checks and the unshifted sentinels are unchanged.
 
 ### Host verification
+
+**First implementation (before review fixes):**
 
 - `python tools/editor.py build`: pinned Open Watcom
   `2026-11-01-Build`; PE32 x86 GUI, OS/subsystem 4.0, static WinMain,
@@ -382,7 +389,36 @@ those disks were not booted again for this re-verification.
   cases, full painted frames, repaint, failed-open retention and path
   rejection. No CI workflow was added.
 
+**Corrected implementation:**
+
+- `python tools/editor.py build`: same Watcom pin and PE32 x86 GUI 4.0,
+  static WinMain and direct GDI32/KERNEL32/USER32 only. `VCEDIT.EXE`
+  SHA-256 `347ef6482cadc59b23253ac72e13c5754beaf4c1a359bf8603725a46244ede17`.
+- `python tools/editor.py test`: the original fixture and frame geometry
+  still pass; a separate independently encoded LF/CRLF fixture uses
+  `WARM~1.IFF` in an ordinary record and a paired reference and `Star Light~`
+  as effect text. Both serialize to the exact expected `0x7f` bytes.
+  All 27 rejection cases pass. The NT scratch test changes only the
+  launch-path spelling in memory after pinning; the alternate scratch
+  directory's contents are unchanged. The driver also forces publish
+  failure after backup, tests successful rollback and retained backup
+  when rollback fails, checks that retry does not consume that backup,
+  and tests a successful publication with failed backup deletion.
+  The failure injections are host-test-only, not editor options.
+- `python tools/editor.py smoke`: same Windows 11 host, seven full-frame
+  comparisons before/after restart, native authoring with `BG~1.IFF`,
+  fixture round-trip, playback and failed-open retention. Replacements of
+  multiply-linked and sharing-locked projects were refused without changing
+  their bytes; the eligible retry succeeded and cleaned up. Independent
+  first-save SHA-256:
+  `8515a3d79c3a45a488cf6c5bf7ab899149e88cac66c42f70e7908e50bbb1a102`.
+- Viewer `build`, `test`, and `smoke` were rerun on the host and passed
+  with the same viewer EXE hash, two original decodes and 16 generated
+  cases. The existing guest probe and viewer qualification was not rerun.
+
 ### Guest verification
+
+**First implementation (before review fixes):**
 
 QEMU 11.1.0 (`v11.1.0-12130-ge470268ff4`), offline, no added CRT, NIC or
 sound card. Each guest used a fresh qcow2 overlay of the corresponding
@@ -428,11 +464,55 @@ Private evidence under `.editor/guest/`: edition and binary comparisons,
 launch commands, transfer bytes, per-guest input/capture logs, framebuffer
 comparisons and base-disk hashes. `qemu-img check` passed for the 98 and XP
 overlays after shutdown; their base disks and the XP RTM backing disk were
-unchanged. The ignored `inputs/` holds local evidence helpers.
+unchanged. The unchanged `xp-transfer.json` is labeled preliminary by its
+sidecar; its `DEMO.VID` hash identifies a zero-filled copy, not the final
+imported save. Final first-pass evidence is `xp-transfer.FINAL.json`,
+`guest98.vid`, `kit/DEMO.VID`, `sp3/xp-identical-project.png` and
+`comparisons.json`. The ignored `inputs/` holds local evidence helpers.
+`KEEP.txt` marks the evidence directories and helpers for preservation
+before local build cleanup or worktree removal.
 The archived Amiga executables are present, but no working original-reader
 environment was available. Original-reader compatibility, Windows 98 FE
 and XP RTM editor runs, physical hardware, audio, the rest of the effects,
 and release qualification remain unverified or out of scope.
+
+**Corrected implementation (fresh guests, not reused captures):**
+
+- Windows 98 SE `4.10.2222` and x86 XP Professional SP3
+  `2600.xpsp.080413-2111` used the same QEMU versions, display modes and
+  clean baselines as above, with fresh overlays. On both guests
+  `A:\SETUP.BAT` installed the corrected EXE and original artwork bytes;
+  `fc /b` matched the EXE against the read-only kit. The corrected EXE
+  hash is `347ef6482cadc59b23253ac72e13c5754beaf4c1a359bf8603725a46244ede17`.
+  On both guests `copy /b C:\M3EDIT\BG.IFF C:\M3EDIT\BG~1.IFF` supplied
+  a filename containing `~`, and the editor command was
+  `C:\M3EDIT\VCEDIT.EXE C:\M3EDIT`.
+- On 98 SE, authored the two cues with `BG~1.IFF` and `BLUE.16`, dragged
+  Slide from tick 25 to 50 with `a=19`, and saved `DEMO.VID` on FAT32.
+  Quit, reopened the project and played to completion. After shutdown,
+  read the actual 135-byte file from a read-only conversion of the
+  overlay. Its bytes match the independent VC10 expectation, including
+  the encoded `0x7f`. SHA-256:
+  `3d04d2a152738c4c2e8c984acf1325b163c2c5d55489595009911968deeb3686`.
+- On XP SP3, ran `copy /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` and
+  `fc /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` (no differences), then
+  opened the exact 98 save with Ctrl+O and replayed it to completion.
+  All 11 full crops (ticks 49, 58 and 68 before/after restart on 98;
+  the same ticks on XP; and Play completion on both) matched all 81,920
+  expected pixels per crop, with the same hashes as the table above.
+  The checker independently decodes the source artwork and applies the
+  measured display conversion only on 98.
+- In a separate overlay, XP SP3 also saved as `CHECK.VID` and replaced
+  that copy with a second Save. `fc /b C:\M3EDIT\DEMO.VID C:\M3EDIT\CHECK.VID`
+  reported no differences; the directory listing showed no `.bak` or
+  `.tmp` remaining.
+- Keep the private evidence at `.editor/guest-fix/` (`KEEP.txt`):
+  `xp-transfer.FINAL.json`, `guest98.vid`, `kit/DEMO.VID`, per-guest
+  commands, captures and framebuffer comparisons. `qemu-img check` found
+  no errors in the two workflow overlays; all three baseline/backing
+  disk hashes remained unchanged. The private `inputs/` verification
+  helpers for this run have the `-fix.py` suffix. Neither the original
+  Amiga reader nor physical Windows hardware was exercised.
 
 ### Before/after inventory
 
@@ -440,9 +520,10 @@ and release qualification remain unverified or out of scope.
 | --- | --- |
 | `.gitignore` | Existing local outputs still ignored; `.editor/` is now ignored too. |
 | `editor/vc10.h`, `editor/vc10.c` | No editor model or serializer → bounded VC10 author/track, screen order and ordinary/paired references, Cut/Slide cue order, ticks, parameters, text and sentinels. Unknown asset assigns, special screens, other effects and nonempty external-object tables are explicitly unsupported. `vc_place` rejects overlaps for both supported IDs; `vc_at` provides deterministic preview geometry. |
-| `editor/local.h`, `editor/local.c` | No editor workspace I/O → bounded local reads and staged replacement. NT project and picture opens descend through checked, held directories; 9x uses local FAT. Save uses same-folder staged and backup names; callers must explicitly select an existing project to replace. The preexisting viewer's different file rules are unchanged. |
+| `editor/local.h`, `editor/local.c` | No editor workspace I/O → bounded local reads and staged replacement. NT project and picture opens descend through checked, held directories; 9x uses local FAT. Save uses same-folder staged and backup names; callers must explicitly select an existing project to replace. Review fix: only NT reads were pinned → metadata checks and saves also use the pinned directory and exact file handles. Neither path overwrites a preexisting backup. The preexisting viewer's different file rules are unchanged. |
 | `editor/editor.c` | No authoring UI → filename field, screen selector, effect buttons, drag/seek and Play/Stop, palette-aware preview, open/save/close and unsaved-change protection. The standalone viewer still does not edit. Paired VC10 references are retained but previewed as their first picture, not original `BitMap2` field alternation. |
 | `editor/model_test.c`, `tools/editor.py`, `tools/editor_smoke.py` | No editor checks → portable model/fixture cases, pinned toolchain editor build and real native control/pixel/recovery checks. Existing viewer and probe commands remain unchanged. |
+| `editor/local_test.c` | No native I/O fault tests → isolated checks for pinned directory identity, rollback and publication with a cleanup warning. Not linked into the editor. |
 | `README.md`, `PROGRESS.md` | Milestone 3 was the next independent development step → editor build/run/workflow instructions and separate host/guest evidence. Full README reviewed; viewer, archive and probe instructions and release gates still apply. |
 | `asset/ilbm.c`, `asset/ilbm.h`, `asset/viewer.c`, `tools/asset.py`, `tools/asset_smoke.py`, probe and archive inventory | No changes. The editor links the existing ILBM decoder, uses the same indexed DIB technique and reuses the existing pins, tool extraction and PE checks; the viewer's file-path behavior, size limits and guest evidence still apply only to the viewer. |
 

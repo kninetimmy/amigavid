@@ -175,8 +175,9 @@ supported here.
 ## Build and use the two-picture editor
 
 On a modern x64 Windows host, use the same Python, Watcom bootstrap, host C
-compiler and desktop setup as the viewer. `build` and `test` do not need the
-archive; `smoke` uses the two locally prepared fixtures:
+compiler and desktop setup as the viewer. Use an NTFS checkout on a directly
+mapped local drive for the native `test` and `smoke` cases. `build` and `test`
+do not need the archive; `smoke` uses the two locally prepared fixtures:
 
 ```powershell
 python tools/probe.py bootstrap
@@ -215,10 +216,11 @@ name subfolders using `/`. Windows drive letters, UNC, path traversal and
 device names are rejected, and NT reads refuse junctions, symlinks and
 multiply-linked files. These rules apply to **every** picture reference,
 including both members of a pair, and link checks apply to project reads
-too. Pictures use the viewer's indexed ILBM decoder with an editor canvas
-limit of 320×256. On indexed displays a frame is palette-realized when its
-colors fit a single logical palette; exactness on 8-bit hardware depends on
-the available entries.
+too. A `~` in a filename (including an 8.3 alias) or supported effect text
+round-trips using the original shifted bytes. Pictures use the viewer's
+indexed ILBM decoder with an editor canvas limit of 320×256. On indexed
+displays a frame is palette-realized when its colors fit a single logical
+palette; exactness on 8-bit hardware depends on the available entries.
 
 The editor preserves active VC10 screen order, paired references, author,
 track number, and both supported effects' parameters and text. It previews
@@ -226,17 +228,26 @@ the first member of a pair only; Psycho Flicker and CD audio are not
 implemented. Other effect IDs, special screen IDs, object tables and
 malformed files are refused without replacing the open document. To replace a
 file, first open that file in the editor. A replacement stages and flushes
-the new bytes before moving the previous file to `name.vid.bak`. An existing
-backup blocks a retry; if the `.vid` is missing after interruption, inspect
-the `.bak` and rename a copy to `.vid` to recover it. This is not a
-power-loss guarantee for FAT.
+the new bytes before moving the previous file to `name.vid.bak`. If publish
+fails, the editor tries to restore the previous file. An existing backup
+blocks a retry; if the `.vid` is missing after interruption or a failed
+rollback, inspect the `.bak` and rename a copy to `.vid` to recover it.
+If publish succeeds but backup cleanup fails,
+the editor reports a saved project with a retained `.bak`, not unsaved edits.
+Initially, the NT editor pinned the workspace only for reads and used the
+launch path again for saves. Now **all** NT save paths (destination/backup
+checks, staging, renames, rollback and cleanup) stay relative to the pinned
+directory or use checked file handles, even if the drive spelling changes.
+The Windows 98 local FAT/FAT32 fallback still uses absolute paths; this is
+not a power-loss guarantee for FAT.
 
 ## First useful demo and release acceptance
 
 Before milestone 3, the PRD's first useful demo was a goal: open real
 editor artwork on Windows 98, add two pictures and a timed transition, save
-the project, and play that file on XP with the same executable. It now
-passes on Windows 98 SE and x86 XP Professional SP3 QEMU guests. The
+the project, and play that file on XP with the same executable. The
+corrected editor passes on Windows 98 SE and x86 XP Professional SP3
+QEMU guests using a 98 save that references a filename with `~`. The
 [milestone 3 evidence](PROGRESS.md#milestone-3--two-picture-editor) separates
 host and guest results. The original Amiga reader and physical hardware
 are not verified.

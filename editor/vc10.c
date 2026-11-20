@@ -170,7 +170,8 @@ static int unshift(char *token)
     if (!*p)
         return 0;
     for (; *p; ++p) {
-        if (*p <= 32 || *p == 127)
+        /* The writer shifts printable '~' (0x7e) to 0x7f. */
+        if (*p <= 32)
             return 0;
         --*p;
     }

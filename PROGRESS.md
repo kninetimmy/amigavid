@@ -300,6 +300,381 @@ those disks were not booted again for this re-verification.
 | `tools/asset_smoke.py` | No viewer smoke harness → actual window tests with local-only captures and a log. All prior cases remain; a regular file in a directory position is now checked too. |
 | `probe/probe.c`, `probe/TEST.TXT`, `tools/probe.py`, `tools/probe_smoke.py`, `tools/inventory.py` | Unchanged tools and probe kit. The probe still uses its original executable-relative synthetic DAT; viewer root selection is separate. The archive inventory still does no extraction. |
 
+## Milestone 3 — two-picture editor
+
+### Source-derived contract
+
+- **Editor:** the original manual's first tutorial and `main.c`'s timeline
+  drag use a horizontal marker to change an effect's start time.
+  `GetTopWindowUnits` maps horizontal position to ticks; the move checks
+  `veffects.c::CanEffectGoHere`, updates `Time`, and calls `SortEffects`.
+  VCEDIT keeps the start-time drag, non-overlap and chronological order.
+  This minimal timeline refuses a blocked drop rather than snapping to a
+  neighbor. Both shipped effects are start/stop effects; this restriction
+  is not attributed to all original effects (one-shot effects differ).
+- **Clock and fields:** `audio.c::GetCurrentCDTime` divides track-relative
+  75 Hz sectors by three. `mainloop.c::MainLoop` activates a timed effect
+  when `MainTime >= Time*2` and calls `fx.c::DoDisplay` once per field.
+  VCEDIT uses 40 ms timeline ticks; deterministic Seek samples the logical
+  output after two field updates per tick. It does not reproduce Amiga
+  copper-list buffering or sync playback to a CD.
+- **Effects:** `neweffects.c::InitVEffectClasses` registers `VET_Cut=1`
+  and `VET_SlideOnUp=2`, both `OC_SCREEN`. `CutInit`/`CutFunc` in `fx.c`
+  replace the base immediately (`CalculateLength` gives 1 tick).
+  `SlideOnUpInit` starts at y=255; `CalculateParam` gives a field step
+  of `ceil(256 / (2*a - 1))` for the duration parameter `a`.
+  `DoDisplay` steps **before** rendering; `SlideOnUpFunc` places the
+  incoming picture at `TOP + Value`, and `SlideOnUpEnd` replaces the
+  base at zero. `videocreator.asm::CopLoopNoSquash` switches the displayed
+  buffer at the split; incoming source row 0 enters at the bottom over
+  the unchanged outgoing picture. The timeline placement length is
+  separately `floor(ceil(256 / ceil(256 / (2*a))) / 2) + 1` ticks
+  (`CalculateLength`). The `a` range 1–255 is the original duration
+  slider's bound for Slide On Up and the other effects that share that
+  parameter-control case in `neweffects.c`; it is not a rule for all
+  effect IDs. Cut has no duration option. For `a=19` and start=50,
+  the split is 241 at tick 50, 129 at 58, 3 at 67 and full incoming at 68.
+- **Active VC10:** `keith.c::SaveVideo` emits the single `0xA9` header
+  byte, author and track, ordered picture names with each byte advanced
+  by one, `ZIP` for an absent second bitmap, vector/quad/3D counts, and
+  cues (tick, effect, screen, `a`–`e`, object, shifted text or `NOTEXT`).
+  `veffects.c::GetScreenNum`/`GetScreenStruct` reserve IDs 1–5 for special
+  screens; ordinary and paired screen records start at 6. `LoadVideo`
+  finds both halves of a paired screen among pictures loaded earlier in
+  the listing. The zero object-number rule is shared by both supported
+  `OC_SCREEN` effects (the original writer emits zero for that class),
+  not all original object classes. Neither `docs/saveformat` nor `defvid`
+  defines this active grammar. The archived `defvid` was checked
+  separately: it lists seven unshifted names without an author, track or
+  second-picture line, then three empty external-object tables and seven
+  cues. None of its seven referenced paths exists in the pinned ZIP;
+  the active parser rejects the historical fields rather than ignoring
+  them.
+- **Shifted byte correction:** the first port's reader rejected `0x7f`
+  even though the original `+1` writer produces it for `~`. The active
+  reader now decodes it as `~` in both names of every screen and in text
+  on both supported effects. Filename, line and field bounds, other
+  invalid-byte checks and the unshifted sentinels are unchanged.
+
+### Host verification
+
+**First implementation (before review fixes):**
+
+- `python tools/editor.py build`: pinned Open Watcom
+  `2026-11-01-Build`; PE32 x86 GUI, OS/subsystem 4.0, static WinMain,
+  direct GDI32/KERNEL32/USER32 only, no delay imports. `VCEDIT.EXE` SHA-256:
+  `29bcde7bbb6bd1e64c7f95bf693b11f970462835ddab8fe5c68ccecbf08e0196`.
+- `python tools/editor.py test`: hand-encoded, synthetic active VC10
+  fixture with two ordinary records and one paired record, including
+  nested/space-containing names, nondefault metadata and effect parameters.
+  LF and CRLF inputs reserialize to identical active-writer LF bytes.
+  Frame geometry and 26 rejection cases passed.
+- `python tools/editor.py smoke`: Windows 11 Pro x64 26300.9974. The
+  native controls opened the two pinned ILBMs, placed Cut at 0 and Slide
+  at 25 with `a=19`, dragged Slide to 50, saved and quit. The first
+  process and the restarted process produced the same complete RGB24
+  previews at ticks 0, 49, 50, 58, 67, 68 and 79, assembled independently
+  from the canonical images and the source-derived split rows. Play on
+  reload reached the final picture. The first save matched independent
+  VC10 bytes (SHA-256
+  `6d37e55f898bee12f2e7e11a73348b7725287b705f9b8851ec01121840324ec3`).
+  The ordinary/paired fixture also round-tripped through the GUI byte
+  for byte. Truncated and missing-asset projects, a junction reference
+  and a hard-linked picture left the open sequence intact. A sharing
+  violation blocked replacement without changing the previous bytes;
+  an unlocked retry succeeded. A simulated interruption between backup
+  and publish kept the old `.bak` recoverable when a retry was refused.
+- The unchanged `python tools/asset.py build`, `test`, and `smoke` also
+  passed: byte-identical viewer, both original decodes, 16 generated
+  cases, full painted frames, repaint, failed-open retention and path
+  rejection. No CI workflow was added.
+
+**Corrected implementation:**
+
+- `python tools/editor.py build`: same Watcom pin and PE32 x86 GUI 4.0,
+  static WinMain and direct GDI32/KERNEL32/USER32 only. `VCEDIT.EXE`
+  SHA-256 `347ef6482cadc59b23253ac72e13c5754beaf4c1a359bf8603725a46244ede17`.
+- `python tools/editor.py test`: the original fixture and frame geometry
+  still pass; a separate independently encoded LF/CRLF fixture uses
+  `WARM~1.IFF` in an ordinary record and a paired reference and `Star Light~`
+  as effect text. Both serialize to the exact expected `0x7f` bytes.
+  All 27 rejection cases pass. The NT scratch test changes only the
+  launch-path spelling in memory after pinning; the alternate scratch
+  directory's contents are unchanged. The driver also forces publish
+  failure after backup, tests successful rollback and retained backup
+  when rollback fails, checks that retry does not consume that backup,
+  and tests a successful publication with failed backup deletion.
+  The failure injections are host-test-only, not editor options.
+- `python tools/editor.py smoke`: same Windows 11 host, seven full-frame
+  comparisons before/after restart, native authoring with `BG~1.IFF`,
+  fixture round-trip, playback and failed-open retention. Replacements of
+  multiply-linked and sharing-locked projects were refused without changing
+  their bytes; the eligible retry succeeded and cleaned up. Independent
+  first-save SHA-256:
+  `8515a3d79c3a45a488cf6c5bf7ab899149e88cac66c42f70e7908e50bbb1a102`.
+- Viewer `build`, `test`, and `smoke` were rerun on the host and passed
+  with the same viewer EXE hash, two original decodes and 16 generated
+  cases. The existing guest probe and viewer qualification was not rerun.
+
+**Replacement protection and canonical-name fix:**
+
+- `python tools/editor.py build`: same pin, PE32 x86 GUI 4.0, static
+  WinMain, direct GDI32/KERNEL32/USER32, no delay imports. `VCEDIT.EXE`
+  SHA-256 `7dbf2fc820d0776263763e6d130d3240f30cd4bfb3a4f19b4d7a21e78511e464`.
+- `python tools/editor.py test`: both active LF/CRLF fixtures, exact
+  output and frame geometry, and 27 rejection cases passed. Native NT
+  scratch checks rejected a different DACL with empty staging and no
+  rename, preserved that file's bytes and DACL, and preserved an
+  ordinary project's inherited DACL on successful replacement. A real
+  8.3 alias was refused; full long and literal `~` names replaced
+  successfully. Missing metadata APIs refused safely. The existing
+  pinned-directory, rollback, retained-backup and cleanup-warning cases
+  still passed.
+- `python tools/editor.py smoke`: Windows 11 repeated native authoring,
+  seven full-frame comparisons before and after restart, paired fixture
+  round-trip, failed-open retention and the linked, locked, eligible
+  and interrupted replacement cases with this EXE.
+
+**Named-stream retention fix:**
+
+- `python tools/editor.py build`: same Watcom pin, PE32 x86 GUI 4.0,
+  static WinMain, direct GDI32/KERNEL32/USER32, no delay imports.
+  `VCEDIT.EXE` SHA-256
+  `2b82625815aa1ffded5f36f12619ba181d3d243bb9abad8e7974c22575f15640`.
+- `python tools/editor.py test`: the two LF/CRLF fixtures, exact VC10
+  output and frame geometry, and 27 rejection cases passed. An NTFS scratch
+  project with a benign `annotations` stream was refused before staging
+  or renaming. Its main and auxiliary bytes were unchanged and no backup
+  or temp file appeared. A missing stream API refused replacement but did
+  not block a first save. Ordinary replacements and the preceding DACL,
+  alias, pinned-directory and rollback controls passed.
+- `python tools/editor.py smoke`: Windows 11 native authoring, exact
+  first save, paired fixture round-trip, seven full-frame comparisons
+  before and after restart, playback, failed-open retention, and linked,
+  locked, eligible and interrupted replacement checks passed.
+
+### Guest verification
+
+**First implementation (before review fixes):**
+
+QEMU 11.1.0 (`v11.1.0-12130-ge470268ff4`), offline, no added CRT, NIC or
+sound card. Each guest used a fresh qcow2 overlay of the corresponding
+Milestone 2 baseline. On both, `A:\SETUP.BAT` copied `VCEDIT.EXE`,
+`BG.IFF` and `BLUE.16` to `C:\M3EDIT`; `FC /B` found no executable
+differences from the read-only transfer media. Both guests ran
+`C:\M3EDIT\VCEDIT.EXE C:\M3EDIT`, using the executable SHA-256 above.
+The artwork bytes match the same two pinned host inputs despite their
+8.3 aliases.
+
+- **Windows 98 Second Edition 4.10.2222:** Pentium, 64 MiB, Cirrus
+  640×480×256, `-icount shift=3,align=off,sleep=on`. Opened `BG.IFF` and
+  `BLUE.16` in the GUI, added Cut at 0 and Slide with duration 19, dragged
+  the Slide marker from 25 to 50, saved `DEMO.VID` to local FAT32, quit,
+  and relaunched. Ctrl+O opened the saved project; Seek restored the same
+  frames, and F5 played through to the final portrait.
+- **Cross-guest transfer:** floppy export did not complete. After clean 98
+  shutdown, the verification helper read the actual `C:\M3EDIT\DEMO.VID`
+  from a read-only conversion of the 98 overlay. Its 133 bytes exactly
+  matched independent expected VC10 output, with SHA-256
+  `2c15b59562bcfbfc9aabbfd24355c88f9663e9d00b9363dfc323cb9e492995a3`.
+  That file (not a reserialization) went onto the read-only XP floppy.
+- **Windows XP Professional SP3 x86, 2600.xpsp.080413-2111:** Pentium III,
+  256 MiB, standard VGA 640×480×32. Used
+  `copy /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` and
+  `fc /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` (no differences). Ctrl+O loaded
+  the 98 save, each Seek rendered the expected frame, and F5 reached
+  “Playback complete” with the final portrait.
+
+Each capture below matched all 81,920 pixels of the independently decoded
+and composited image. On 98 the expected RGB was transformed by the prior
+measured Cirrus conversion from #16; on XP it was canonical RGB24. These
+are deterministic Seek captures, not measurements of playback jitter or
+physical-display timing.
+
+| Tick | Windows 98 SE (same before quit and after reopen) | x86 XP SP3 (from 98 save) |
+| --- | --- | --- |
+| 49 (before Slide) | `fea8d0674c7ccd1234123cf4eea7ce2882f33aeaa5eb60b1a3571b9009f91338` | `268d851d1941790a3019c94c3a3b8319259246680808b969b8d768923fa3b9bf` |
+| 58 (during Slide) | `c62114de49b671489aad6f1a0ea5efc8580482903f0ffd9afc7b3575e8cd98a5` | `3fa27dffbcca225ac50f6c049393713a2fb0a1c4b038fd7d65b472dbc69b50d0` |
+| 68 (after Slide and at Play completion) | `9cec74bf88ae16ed810504c2f51e0b9b7dd6582b46121c5b768d2d64525b2550` | `622a27248ed4f36102cd514712c0e1a83667cb114b1afa9c153b33cced55e585` |
+
+Private evidence under `.editor/guest/`: edition and binary comparisons,
+launch commands, transfer bytes, per-guest input/capture logs, framebuffer
+comparisons and base-disk hashes. `qemu-img check` passed for the 98 and XP
+overlays after shutdown; their base disks and the XP RTM backing disk were
+unchanged. The unchanged `xp-transfer.json` is labeled preliminary by its
+sidecar; its `DEMO.VID` hash identifies a zero-filled copy, not the final
+imported save. Final first-pass evidence is `xp-transfer.FINAL.json`,
+`guest98.vid`, `kit/DEMO.VID`, `sp3/xp-identical-project.png` and
+`comparisons.json`. The ignored `inputs/` holds local evidence helpers.
+`KEEP.txt` marks the evidence directories and helpers for preservation
+before local build cleanup or worktree removal.
+The archived Amiga executables are present, but no working original-reader
+environment was available. Original-reader compatibility, Windows 98 FE
+and XP RTM editor runs, physical hardware, audio, the rest of the effects,
+and release qualification remain unverified or out of scope.
+
+**Corrected implementation (fresh guests, not reused captures):**
+
+- Windows 98 SE `4.10.2222` and x86 XP Professional SP3
+  `2600.xpsp.080413-2111` used the same QEMU versions, display modes and
+  clean baselines as above, with fresh overlays. On both guests
+  `A:\SETUP.BAT` installed the corrected EXE and original artwork bytes;
+  `fc /b` matched the EXE against the read-only kit. The corrected EXE
+  hash is `347ef6482cadc59b23253ac72e13c5754beaf4c1a359bf8603725a46244ede17`.
+  On both guests `copy /b C:\M3EDIT\BG.IFF C:\M3EDIT\BG~1.IFF` supplied
+  a filename containing `~`, and the editor command was
+  `C:\M3EDIT\VCEDIT.EXE C:\M3EDIT`.
+- On 98 SE, authored the two cues with `BG~1.IFF` and `BLUE.16`, dragged
+  Slide from tick 25 to 50 with `a=19`, and saved `DEMO.VID` on FAT32.
+  Quit, reopened the project and played to completion. After shutdown,
+  read the actual 135-byte file from a read-only conversion of the
+  overlay. Its bytes match the independent VC10 expectation, including
+  the encoded `0x7f`. SHA-256:
+  `3d04d2a152738c4c2e8c984acf1325b163c2c5d55489595009911968deeb3686`.
+- On XP SP3, ran `copy /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` and
+  `fc /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` (no differences), then
+  opened the exact 98 save with Ctrl+O and replayed it to completion.
+  All 11 full crops (ticks 49, 58 and 68 before/after restart on 98;
+  the same ticks on XP; and Play completion on both) matched all 81,920
+  expected pixels per crop, with the same hashes as the table above.
+  The checker independently decodes the source artwork and applies the
+  measured display conversion only on 98.
+- In a separate overlay, XP SP3 also saved as `CHECK.VID` and replaced
+  that copy with a second Save. `fc /b C:\M3EDIT\DEMO.VID C:\M3EDIT\CHECK.VID`
+  reported no differences; the directory listing showed no `.bak` or
+  `.tmp` remaining.
+- Keep the private evidence at `.editor/guest-fix/` (`KEEP.txt`):
+  `xp-transfer.FINAL.json`, `guest98.vid`, `kit/DEMO.VID`, per-guest
+  commands, captures and framebuffer comparisons. `qemu-img check` found
+  no errors in the two workflow overlays; all three baseline/backing
+  disk hashes remained unchanged. The private `inputs/` verification
+  helpers for this run have the `-fix.py` suffix. Neither the original
+  Amiga reader nor physical Windows hardware was exercised.
+
+**Replacement protection and canonical-name fix (fresh guests):**
+
+- The same QEMU configurations and clean baselines were used on Windows
+  98 SE `4.10.2222` and x86 XP Professional SP3 `2600.xpsp.080413-2111`.
+  Both used the host build above. `A:\SETUP.BAT` installed the EXE and
+  pictures; `FC /B` matched each guest EXE with the read-only transfer
+  copy. Both copied `BG.IFF` to `BG~1.IFF` using `copy /b` and ran
+  `C:\M3EDIT\VCEDIT.EXE C:\M3EDIT`.
+- On 98 SE (FAT32), authored Cut at 0 and Slide at 25 with `a=19`, dragged
+  Slide to 50, saved `DEMO.VID`, restarted, reopened, sought and played
+  to completion. Read 135 bytes from the shut-down overlay, matching the
+  independently encoded project and SHA-256
+  `3d04d2a152738c4c2e8c984acf1325b163c2c5d55489595009911968deeb3686`.
+- FAT32 replacement controls: `dir C:\M3EDIT` identified `LONGPR~1.VID`
+  as the alias for `long project file.vid`. Open by alias succeeded; Save
+  refused. Replacement of the literal `lit~1.vid` moved its Slide from
+  tick 50 to 60 and left no `.bak` or `.tmp`. After placing a known `.bak`
+  with `copy /b`, another Save refused. Offline FAT32 inspection verified
+  the unchanged long name and original bytes, the updated literal-name
+  bytes, and the separate backup's original bytes. This was not a forced
+  mid-rename failure or a power-loss test.
+- On XP SP3 (NTFS), `copy /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` followed by
+  `fc /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` transferred the exact 98 save.
+  Ctrl+O and F5 opened and replayed it to completion. The two guests'
+  11 fresh full crops matched all 81,920 pixels per crop at the same
+  ticks and hashes as above. The 98 crops use the independently
+  measured Cirrus conversion; XP crops use canonical RGB24.
+  XP also saved and then replaced an ordinary `CHECK.VID`; `fc /b`
+  matched it to `DEMO.VID`, and `dir /a` showed no `.bak` or `.tmp`.
+- Preserve `.editor/guest-acl/` (`KEEP.txt`, `MANIFEST.json`), including
+  the final transfer manifest, original guest-written file, host logs,
+  guest captures, commands and offline FAT verification. `qemu-img check`
+  passed for both shut-down overlays; all three base/backing hashes were
+  unchanged. Keep both earlier guest evidence sets and dependent private
+  inputs. Original Amiga reader, 98 FE and XP RTM editor runs, physical
+  hardware and release qualification remain unverified.
+
+**Named-stream retention fix (fresh guests):**
+
+- The same offline QEMU 11.1.0 configurations and clean baselines were
+  used on Windows 98 SE `4.10.2222` and x86 XP Professional SP3
+  `2600.xpsp.080413-2111`. On both, `A:\SETUP.BAT` installed the new
+  checksummed EXE and pictures; `FC /B` found no EXE differences against
+  the read-only kit. Both used `copy /b C:\M3EDIT\BG.IFF C:\M3EDIT\BG~1.IFF`
+  and ran `C:\M3EDIT\VCEDIT.EXE C:\M3EDIT`.
+- On 98 SE (FAT32), authored Cut at tick 0 and Slide at 25 with duration
+  19, dragged Slide to 50, saved `DEMO.VID`, quit, reopened and replayed.
+  After shutdown, read the actual 135 bytes from the overlay. They match
+  the independent VC10 expectation, SHA-256
+  `3d04d2a152738c4c2e8c984acf1325b163c2c5d55489595009911968deeb3686`.
+- On XP SP3 (NTFS), `copy /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` and
+  `fc /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` transferred and verified that
+  exact save. Ctrl+O opened it, Seek checked ticks 49, 58 and 68, and
+  F5 reached playback completion. All 11 fresh guest captures
+  (including 98 before and after restart) matched every one of their
+  81,920 pixels, with the same calibrated 98 and canonical XP hashes
+  as in the table above.
+- XP NTFS ordinary replacement: made a separate `CHECK.VID` with
+  `copy /b`, opened it in VCEDIT, dragged Slide from 50 to 57, saved
+  over that copy and reopened it at the new cue position. `fc /b`
+  showed exactly the expected byte change (`30` to `37` at offset
+  `0x6d`); the transferred `DEMO.VID` still matched the floppy and
+  `dir /a /b` showed no `.bak` or `.tmp` files.
+- Preserve `.editor/guest-stream/` (`KEEP.txt`, `MANIFEST.json`)
+  separately from the three earlier guest evidence sets and their
+  dependencies. Both overlays passed `qemu-img check` after shutdown
+  and the base/backing hashes were unchanged. Named-stream refusal was
+  tested on the host; XP verified eligible replacement. The earlier
+  FAT32 replacement controls were not repeated in this cycle. Original
+  Amiga reader, physical hardware, FAT power loss, and editor release
+  qualification remain unverified.
+
+### Before/after inventory
+
+| Element | Before → after |
+| --- | --- |
+| `.gitignore` | Existing local outputs still ignored; `.editor/` is now ignored too. |
+| `editor/vc10.h`, `editor/vc10.c` | No editor model or serializer → bounded VC10 author/track, screen order and ordinary/paired references, Cut/Slide cue order, ticks, parameters, text and sentinels. Unknown asset assigns, special screens, other effects and nonempty external-object tables are explicitly unsupported. `vc_place` rejects overlaps for both supported IDs; `vc_at` provides deterministic preview geometry. |
+| `editor/local.h`, `editor/local.c` | No editor workspace I/O → bounded local reads and staged replacement. NT project and picture opens descend through checked, held directories; 9x uses local FAT. Save uses same-folder staged and backup names; callers must explicitly select an existing project to replace. Review fix: only NT reads were pinned → metadata checks and saves also use the pinned directory and exact file handles. Neither path overwrites a preexisting backup. The preexisting viewer's different file rules are unchanged. |
+| `editor/editor.c` | No authoring UI → filename field, screen selector, effect buttons, drag/seek and Play/Stop, palette-aware preview, open/save/close and unsaved-change protection. The standalone viewer still does not edit. Paired VC10 references are retained but previewed as their first picture, not original `BitMap2` field alternation. |
+| `editor/model_test.c`, `tools/editor.py`, `tools/editor_smoke.py` | No editor checks → portable model/fixture cases, pinned toolchain editor build and real native control/pixel/recovery checks. Existing viewer and probe commands remain unchanged. |
+| `editor/local_test.c` | No native I/O fault tests → isolated checks for pinned directory identity, rollback and publication with a cleanup warning. Not linked into the editor. |
+| `README.md`, `PROGRESS.md` | Milestone 3 was the next independent development step → editor build/run/workflow instructions and separate host/guest evidence. Full README reviewed; viewer, archive and probe instructions and release gates still apply. |
+| `asset/ilbm.c`, `asset/ilbm.h`, `asset/viewer.c`, `tools/asset.py`, `tools/asset_smoke.py`, probe and archive inventory | No changes. The editor links the existing ILBM decoder, uses the same indexed DIB technique and reuses the existing pins, tool extraction and PE checks; the viewer's file-path behavior, size limits and guest evidence still apply only to the viewer. |
+
+**Replacement-only follow-up:** Previously NT replacement wrote project
+bytes with whatever permissions the stage inherited. Now every NT
+replacement uses `NtQuerySecurityObject` on the held original and empty
+stage before writing, and refuses when the access metadata differs or
+cannot be read (owner, group, DACL, and on applicable NT versions,
+integrity label and resource/scope information). Encrypted originals
+are refused rather than copied to a potentially unencrypted stage.
+The comparison is intentionally conservative, not an ACL editor, audit
+policy migration, or a guarantee against concurrent workspace changes.
+First saves still use normal inherited protection.
+
+Previously either platform could publish or roll back to a typed 8.3
+alias instead of the prior long name. Now every existing destination
+must pass the real-leaf check before the editor moves the original:
+NT matches the pinned directory entry and open file ID; 9x checks the
+local FAT long name using `FindFirstFileA`. Genuine aliases can still
+be read but not used for replacement. A literal `~` name remains valid.
+Directory identity, link and sharing checks, no-overwrite backup,
+rollback and cleanup behavior are otherwise unchanged. The host driver
+and `tools/editor.py test` add scratch checks only; no guest or test
+hook is linked into the editor. GUI, model, original format, decoder,
+probe and viewer behavior are unchanged by this follow-up.
+
+**Named-stream retention follow-up:** The NT save boundary in
+`editor/local.c` previously discarded named data streams with the old
+file after publication. Now every NT replacement calls
+`NtQueryInformationFile(FileStreamInformation)` on the held original and
+proceeds only on a complete result with one unnamed data stream. Extra
+streams, unavailable or unsupported queries, overflow and invalid
+results refuse before staging. No path is reopened for that check, and
+the existing handle, sharing, name, link, DACL, backup and rollback rules
+remain. This is not a guarantee against concurrent workspace changes.
+Reads, first saves and the 9x FAT path are unchanged.
+`editor/local_test.c` and `tools/editor.py test` keep the earlier tests and
+add a scratch-only retention check; no test code is linked into the
+editor. The GUI, model, original format, decoder, probe and viewer are
+unchanged. The full README was reviewed: the save guidance now describes
+the refusal; probe, archive, viewer and release instructions still apply.
+
 ## Open blockers
 
 - `DT_STUFF.S`, vector tables/media, demo video media, and font resources are
@@ -314,9 +689,11 @@ those disks were not booted again for this re-verification.
 
 ## Next milestone
 
-Before this viewer, milestone 2 real-asset ILBM decoding and display was
-the next independent development step. It now has host and four-guest
-evidence under #16's calibrated-output criterion. Milestone 3 is to edit, save,
-reopen and replay one sequence. Obtain physical Windows 98 and XP
+Before milestone 2, real-asset ILBM decoding and display was the next
+independent development step; the viewer now has host and four-guest
+evidence under #16's calibrated-output criterion. Before milestone 3,
+the next step was to edit, save, reopen and replay one sequence. The
+two-picture workflow is now implemented; the next planned phase covers
+the remaining effects and special screens. Obtain physical Windows 98 and XP
 [probe target-checklist](probe/TEST.TXT) results before claiming native
 hardware validation. Editor-release workflows remain unverified.

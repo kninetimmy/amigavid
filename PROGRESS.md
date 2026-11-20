@@ -453,6 +453,179 @@ those disks were not booted again for this re-verification.
   before and after restart, playback, failed-open retention, and linked,
   locked, eligible and interrupted replacement checks passed.
 
+**Shared-marker selection (issue #20, 2026-11-20; historical):**
+
+The issue #20 results below describe the preserved PR #21 builds and their
+local logs, not the current hit rule. Issue #22 supersedes their target
+expectations where a drawn body contains the pointer.
+
+- The first implementation made stationary clicks cycle through cues at an
+  isolated marker in timeline order and wrap. The status and tick box
+  identify the selected start tick; selection does not edit cue data or
+  mark the document unsaved. A drag keeps the selected cue instead of
+  cycling on press. With no selection, an ordinary drag still takes the
+  first hit.
+- Initial implementation verification:
+  `python tools/editor.py build`, `python tools/editor.py test` and
+  `python tools/editor.py smoke` each passed (exit 0), locally, not in CI.
+  Host: Windows 11 x64 build 26300, NTFS, Python 3.14.4 and GCC 16.1.0.
+  Build: verified Open Watcom `2026-11-01-Build`, x86 PE32 GUI 4.0,
+  static WinMain, direct GDI32/KERNEL32/USER32 only, no delay imports.
+  `VCEDIT.EXE` SHA-256:
+  `238705b45bee080783485c15ddd31b337434084b0ce45013883b0921335649ba`.
+- That smoke checked three isolated Cut cues at ticks 10, 11 and 12 at
+  pixel x=17, selection through 10/11/12/10, a stationary hit-area-edge click,
+  byte-identical saved selection and clean close without an unsaved prompt.
+  It compared a direct first-cue drag and a selected cue 11 → 503 drag
+  against independently encoded VC10 bytes, retaining all other cues and
+  parameters. Reordering, single-marker drags, rejected overlap and
+  empty-track seek pass, as do all previous preview, persistence and
+  recovery checks. The model fixtures, 27 rejection cases and NT save
+  protection/fault tests also pass.
+- Local build/import evidence and native smoke log are in `.editor/`.
+  The full README was reviewed and the selection gesture documented;
+  probe, archive, viewer, save-protection and release guidance still apply.
+  This changed executable was exercised only on the modern host, not on
+  Windows 98, XP, physical target hardware or an original Amiga reader.
+  Earlier guest evidence remains historical; the next milestone is
+  unchanged.
+
+**First nearby-marker review correction (issue #20; refined below):**
+
+- Hit testing now chooses the nearest marker within five pixels, with
+  equal-distance ties resolved in timeline order. Only cues at that exact
+  rendered x share a selection cycle or retain selection for a drag;
+  selection at another pixel cannot steal the drag. Empty-track seeks
+  clear the selected-tick status as well as the selection.
+- The expanded smoke on the pre-review binary above failed with
+  `shared marker expected tick 10, got 44` (exit 1), captured in
+  `.editor/ISSUE20-REVIEW-BASELINE.txt`. This replaces the earlier
+  unretained pre-selection baseline failure claim.
+- After correction, `python tools/editor.py build`,
+  `python tools/editor.py test` and `python tools/editor.py smoke` all
+  passed locally (exit 0), not in CI, on the same Windows 11 x64 host.
+  The verified Watcom pin, PE profile and direct imports are unchanged.
+  `VCEDIT.EXE` SHA-256:
+  `d3f0c5d64a7579724a9aa91c58418cfc39468d1efe6faad965390fe2b947f49c`.
+- Native smoke now checks span 4025 with ticks 10/11/12 at x17 and tick
+  44 at x22: cycling wraps to 10, excluding 44. Selection-only saves are
+  byte-identical. The selected non-first cue 11 → 503 move, nearby cue
+  44 → 22 move followed by an exact-x17 cue 10 → 503 drag, and an exact-x22
+  cue 44 → 503 drag while cue 11 is selected all match independent VC10
+  bytes. Nearest hits, both inclusive hit-area edges, outside seeks,
+  cleared status, equidistant ties and clean selection-only close pass.
+  The previous model, NT-save, preview and recovery checks also pass.
+- An intermediate smoke attempt dropped only two pixels from the nearby
+  marker and failed its move oracle; the test now drops three pixels,
+  preserving the existing two-pixel no-move behavior. That attempt is in
+  `.editor/ISSUE20-REVIEW-smoke.txt`; passing command logs are
+  `.editor/ISSUE20-REVIEW-build.txt`, `.editor/ISSUE20-REVIEW-test.txt` and
+  `.editor/ISSUE20-REVIEW-smoke-final.txt`. Build/import evidence and the
+  final native results remain in `.editor/PE-IMPORTS.txt` and
+  `.editor/HOST-SMOKE.txt`.
+- The full README was reviewed again and its gesture description clarified;
+  the remaining guidance is current. Only the modern host was exercised:
+  no Windows 98/XP guest, physical target or original Amiga-reader run
+  was performed for this correction.
+
+**Ordinary-drag and captured-open review correction (issue #20; refined below):**
+
+- The previous nearest-hit rule changed ordinary drags on distinct marker
+  pixels. This revision retained the base's first hit unless the five-pixel
+  window contained co-located cues. Distant shared groups had no effect,
+  but an unrelated shared pixel inside the window could still change the hit.
+- Before the fix, the expanded native smoke reproduced replacement during
+  mouse capture: exit 1, `release after project replacement reused stale
+  drag/selection`, retained in `.editor/ISSUE20-CYCLE2-BASELINE.txt`.
+  Successful project opens now cancel capture and clear pending drag and
+  selection; cue-index reads are guarded. A short no-op drag also reports
+  the newly selected cue's tick instead of leaving the previous status.
+- `python tools/editor.py build`, `python tools/editor.py test` and
+  `python tools/editor.py smoke` each passed locally (exit 0), not in CI,
+  on Windows 11 x64 build 26300, NTFS, Python 3.14.4 and GCC 16.1.0.
+  The verified Watcom pin, PE profile and imports are unchanged.
+  `VCEDIT.EXE` SHA-256:
+  `3f9e9a6885eada57d9bd12aef5bcba4a535a9d756428879f23ac6be60bd09eef`.
+- New saved-byte checks cover a no-selection x22 → x85 drag with separate
+  unshared x17/x22 markers, both without and with a distant shared group:
+  cue 10 at x17 moves to tick 503, as on base. Click selection agrees.
+  Captured project replacement checks stationary and moving releases of
+  an invalid old index and a reused valid index, with unchanged replacement
+  bytes. A short x22 → x23 no-op drag reports tick 44 in both controls and
+  saves unchanged bytes. All prior model, NT-save, preview, shared-marker,
+  reordering, overlap, seek and recovery checks still pass.
+- Command logs: `.editor/ISSUE20-CYCLE2-build.txt`, `-test.txt` and
+  `-smoke.txt`; native results and build evidence remain in
+  `.editor/HOST-SMOKE.txt` and `.editor/PE-IMPORTS.txt`. The full README was
+  reviewed and its gesture description corrected; other guidance remains
+  current. Only the modern host was exercised, not Windows 98/XP guests,
+  physical target hardware or the original Amiga reader.
+
+**Candidate-pixel and tick-field review correction (issue #20):**
+
+- Clicks and drags keep the legacy first hit unless that candidate or the
+  nearest candidate shares its exact pixel. Only then does the nearest
+  candidate win, with ties kept in timeline order. Selection refreshes the
+  tick box even when the selected tick already equals the playhead.
+- The new smoke cases failed separately on `2f9baf0` (exit 1): selecting
+  tick 10 left `999` in the tick box, and the x22 → x85 drag failed to
+  move only tick 10 to 503 with an unrelated shared x27 marker. Logs:
+  `.editor/ISSUE20-CYCLE3-base-tick.txt` and `-base-drag.txt`.
+- `python tools/editor.py build`, `python tools/editor.py test` and
+  `python tools/editor.py smoke` all passed locally (exit 0), not in CI.
+  Windows 11 Pro x64 26300.9974, NTFS, Python 3.14.4, GCC 16.1.0.
+  The Watcom pin, PE profile and imports are unchanged. `VCEDIT.EXE`
+  SHA-256 `edf2f03587c8a2c24b3a5f4a3dcc377e9bb7c9d143bf993fecfe47a79af5066a`.
+- Smoke compared exact saved VC10 bytes across six layouts: unshared
+  candidates (no, distant, or incidental shared pixel), shared first
+  candidate, shared nearest candidate, and both shared. It confirmed that
+  typing `999` without submitting leaves it in the edit field, until
+  clicking cue 10 at the existing playhead restores 10 in the field and
+  identifies the cue in status. Shared 10/11/12/10 cycling, the non-first
+  cue move, ties, adjacent markers, capture cancellation and earlier
+  checks still passed.
+- Local command logs: `.editor/ISSUE20-CYCLE3-build.txt`, `-test.txt`
+  and `-smoke.txt`. The full README was reviewed and its gesture and
+  guest-evidence wording updated. The new build was tested only on the
+  modern host, not on Windows 98/XP guests, physical targets, or the
+  original Amiga reader.
+
+**Visible-marker targeting (issue #22, 2026-11-20):**
+
+- **Original-source evidence:** In the SHA-256-pinned `inputs/vc.zip`,
+  `vc/main.c:937–952,973–989,4586–4610` ties marker drawing and list
+  append order together. `CheckTopWindowSquares`
+  (`vc/main.c:1142–1204,1353–1358,1501–1504`) scans backward and tests
+  the pointer against the square rectangle, so the last drawn hit wins.
+  The rectangle is half-open (`vc/sebsgads.c:1214–1223`).
+  `vc/main.c:1182–1185,1212–1214` captures and preserves the horizontal
+  grab offset. The manual (`vc/docs/videocreator.manual:317–325`)
+  describes dragging the numbered square sideways to change its start.
+- **Win32 behavior:** Painting and input share the full marker rectangle.
+  With no rectangle hit, the existing five-pixel first-hit fallback
+  still applies. Cycling cues that share the winning start pixel is a
+  deliberate Win32 extension, not a claim about the original editor.
+- **Host evidence:** The new smoke failed against the preserved `95cbf79`
+  build (exit 1): x20 chose tick 44 instead of the sole visible hit at
+  tick 10. The corrected `python tools/editor.py build`,
+  `python tools/editor.py test` and `python tools/editor.py smoke` passed
+  locally (exit 0), not in CI, on Windows 11 Pro x64 26300.9974.
+  `VCEDIT.EXE` SHA-256:
+  `17a7c76f77b13b7283103a218846493f307959a2856bb61a64fa72b885fafe7c`.
+- Native smoke verifies x20 vs. x22 across both mixed layouts and the
+  singleton layout, first-hit fallback and empty seeks outside the row,
+  and exclusive right/bottom edges of a long Slide. It checks matching
+  status and tick text, wraparound, byte-identical selection saves,
+  the grab offset, and independent VC10 bytes after moving only the
+  selected non-first cue (11 → 503). Isolated moves, overlap refusal,
+  capture cancellation on project replacement and existing authoring,
+  preview, replay and save checks still pass. Local evidence is in
+  `.editor/PE-IMPORTS.txt`, `.editor/HOST-SMOKE.txt` and
+  `.editor/ISSUE22-BASELINE-smoke.txt`.
+- The full README was reviewed. It documents the gesture and separates
+  this host check from earlier guest evidence. No Windows 98/XP guest,
+  physical target or original-reader test was run for this build.
+
 ### Guest verification
 
 **First implementation (before review fixes):**
@@ -462,7 +635,8 @@ sound card. Each guest used a fresh qcow2 overlay of the corresponding
 Milestone 2 baseline. On both, `A:\SETUP.BAT` copied `VCEDIT.EXE`,
 `BG.IFF` and `BLUE.16` to `C:\M3EDIT`; `FC /B` found no executable
 differences from the read-only transfer media. Both guests ran
-`C:\M3EDIT\VCEDIT.EXE C:\M3EDIT`, using the executable SHA-256 above.
+`C:\M3EDIT\VCEDIT.EXE C:\M3EDIT` with `VCEDIT.EXE` SHA-256
+`29bcde7bbb6bd1e64c7f95bf693b11f970462835ddab8fe5c68ccecbf08e0196`.
 The artwork bytes match the same two pinned host inputs despite their
 8.3 aliases.
 

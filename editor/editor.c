@@ -31,7 +31,7 @@ static HWND window, files, pictures, duration, position, status;
 static unsigned long tick, shown_tick;
 static DWORD started;
 static int playing, dragging = -1, drag_x, dirty;
-static int selected = -1, drag_start_x, drag_offset, drag_moved;
+static int selected = -1, drag_start_x, drag_start_y, drag_offset, drag_moved;
 static int painted;
 static struct vc_frame shown;
 static unsigned char rgb[VC_WIDTH * VC_HEIGHT * 3], indexed[VC_WIDTH * VC_HEIGHT];
@@ -534,6 +534,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 dragging = selected;
             drag_x = to_x(doc->project.cue[dragging].tick);
             drag_start_x = x;
+            drag_start_y = y;
             drag_offset = x - drag_x;
             drag_moved = 0;
             SetCapture(hwnd);
@@ -547,7 +548,8 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_MOUSEMOVE:
         if (dragging >= 0) {
             x = (short)LOWORD(lp);
-            if (x != drag_start_x)
+            y = (short)HIWORD(lp);
+            if (x != drag_start_x || y != drag_start_y)
                 drag_moved = 1;
             drag_x = to_x(to_tick(x - drag_offset));
             InvalidateRect(hwnd, NULL, FALSE);
@@ -568,7 +570,8 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             }
             cue = doc->project.cue[i];
             x = (short)LOWORD(lp);
-            if (!drag_moved && x == drag_start_x) {
+            y = (short)HIWORD(lp);
+            if (!drag_moved && x == drag_start_x && y == drag_start_y) {
                 /* Cycle only on release, so a drag keeps the selected cue. */
                 if (selected == (int)i) {
                     changed = (i + 1) % doc->project.cues;

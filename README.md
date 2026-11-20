@@ -39,7 +39,10 @@ measured Cirrus display-channel conversion. That conversion merges two
 background grays into one displayed color (16 displayed colors from 17
 canonical colors), as allowed by issue #16; no tolerance is used. See the
 [probe matrix](PROGRESS.md#runtime-evidence) and
-[viewer evidence](PROGRESS.md#milestone-2--real-asset-ilbm-viewer).
+  [viewer evidence](PROGRESS.md#milestone-2--real-asset-ilbm-viewer).
+
+Milestone 3 adds `VCEDIT.EXE`, a separate editor for a two-picture sequence.
+The probe and viewer remain available and unchanged.
 
 ## Build and test the Win32 probe
 
@@ -169,11 +172,74 @@ indexed 1–8 plane ILBM with raw or ByteRun1 rows (up to 1024×1024 and
 4 MiB input); HAM, Extra Half-Brite, masks and other formats are not
 supported here.
 
+## Build and use the two-picture editor
+
+On a modern x64 Windows host, use the same Python, Watcom bootstrap, host C
+compiler and desktop setup as the viewer. `build` and `test` do not need the
+archive; `smoke` uses the two locally prepared fixtures:
+
+```powershell
+python tools/probe.py bootstrap
+python tools/asset.py prepare
+python tools/editor.py build
+python tools/editor.py test
+python tools/editor.py smoke
+```
+
+Launch `.editor\VCEDIT.EXE` with a single absolute, local workspace directory:
+
+```powershell
+& .\.editor\VCEDIT.EXE (Resolve-Path '.\inputs\Viewer Assets').Path
+```
+
+On a guest, for example: `C:\M3EDIT\VCEDIT.EXE C:\M3EDIT`. Copy your two
+pictures to that folder first. It must be on local FAT on Windows 98.
+
+1. Enter the first picture's filename, then **Open picture** (Ctrl+I).
+   Choose **Add Straight Cut**. Open the second picture and choose
+   **Add Slide On Up**. The screen list selects the target for the next cue;
+   **Slide duration** is in 25ths of a second (default 25).
+2. Drag the second cue's marker horizontally to a new start tick. Cues
+   are kept in time order; a drop that would overlap is refused. **Play**
+   (F5) starts from tick 0, **Stop** (Esc) holds the frame, and **Seek**
+   renders the exact tick in the edit box without waiting on the timer.
+3. Enter a new `.vid` filename, then **Save VID** (Ctrl+S). Quit and
+   relaunch, enter the same filename, **Open VID** (Ctrl+O), then **Play**.
+   Move the file together with its pictures to play on another PC.
+
+Use a workspace you control; don't edit its files in another program during
+a save. Project filenames are ASCII leaves ending in `.vid`; new picture
+filenames are ASCII leaves of at most 24 characters (spaces inside are OK).
+Imported VC10 asset names are workspace-relative or use `VCPics:` and can
+name subfolders using `/`. Windows drive letters, UNC, path traversal and
+device names are rejected, and NT reads refuse junctions, symlinks and
+multiply-linked files. These rules apply to **every** picture reference,
+including both members of a pair, and link checks apply to project reads
+too. Pictures use the viewer's indexed ILBM decoder with an editor canvas
+limit of 320×256. On indexed displays a frame is palette-realized when its
+colors fit a single logical palette; exactness on 8-bit hardware depends on
+the available entries.
+
+The editor preserves active VC10 screen order, paired references, author,
+track number, and both supported effects' parameters and text. It previews
+the first member of a pair only; Psycho Flicker and CD audio are not
+implemented. Other effect IDs, special screen IDs, object tables and
+malformed files are refused without replacing the open document. To replace a
+file, first open that file in the editor. A replacement stages and flushes
+the new bytes before moving the previous file to `name.vid.bak`. An existing
+backup blocks a retry; if the `.vid` is missing after interruption, inspect
+the `.bak` and rename a copy to `.vid` to recover it. This is not a
+power-loss guarantee for FAT.
+
 ## First useful demo and release acceptance
 
-The PRD's first useful demo goal is to open real editor artwork on Windows
-98, add two pictures and a timed transition, save the project, and play that
-file on XP with the same executable.
+Before milestone 3, the PRD's first useful demo was a goal: open real
+editor artwork on Windows 98, add two pictures and a timed transition, save
+the project, and play that file on XP with the same executable. It now
+passes on Windows 98 SE and x86 XP Professional SP3 QEMU guests. The
+[milestone 3 evidence](PROGRESS.md#milestone-3--two-picture-editor) separates
+host and guest results. The original Amiga reader and physical hardware
+are not verified.
 
 Release acceptance is stricter: the same portable ZIP must pass the edit,
 save, reopen and playback workflow on both Windows families. A modern-host

@@ -1415,6 +1415,58 @@ the refusal; probe, archive, viewer and release instructions still apply.
   physical hardware, the original Amiga reader or an editor release. No
   original source, artwork, executable, disk or capture is published.
 
+### Native multiline paste repair
+
+- **2026-11-20, issue #42 criterion 3:** real `WM_PASTE` on the isolated XP
+  SP3 guest confirmed the review hypothesis on `317b0f2`. With an eligible
+  cue at tick 25 after a Cut, replacing `7` with `25\r\n256` kept `25`;
+  replacing the last two digits of `125` with `2\r\n256` kept `12`. Both
+  appended a cue, changing the exact 88-byte baseline to 115 bytes. Bare CR
+  and trailing CRLF also admitted prefixes; bare LF was already refused on
+  this guest. The driver exited **1: 40 failures / 160 cases** across IDs 2–9.
+- **Repaired:** Ticks uses a stock multiline EDIT in the same bounds, with
+  horizontal and vertical auto-scrolling so neither a line break nor the
+  visible size can clip a paste to a valid prefix. The existing whole-field
+  check still requires 1–255, default 25. No custom clipboard handler, new
+  API imports, timing or placement changes.
+- **Observed green:** the identical guest driver exited **0: 0 failures /
+  160 cases**. The 128 refusals left exact baseline bytes unchanged,
+  including whole-field and partial selection replacement with CRLF, LF
+  and CR, trailing CRLF, `1999` and the other single-line negatives. The 32
+  positives saved exact cues for 1/25/255 and a selection replacement to
+  255. An independent host reader reconstructed and compared all 320 red and
+  green projects. The driver built by `python tools/editor.py paste_test`
+  repeated the green result. The earlier 104-case evidence above is retained.
+- Same disposable Windows XP Professional SP3 x86 `5.1.2600` QEMU overlay
+  as above, using separate private QMP sockets and FAT16 transfers, without
+  NIC, clipboard sharing, host clipboard access or login secrets. Both
+  backing hashes stayed unchanged and `qemu-img check` found no overlay
+  errors. Private evidence: `.editor/issue42-xp-multiline-20261120/`
+  (`red/`, `green/` and `try2/` contain `final-results/PASTE.LOG`, `EXIT.TXT`
+  and the exact `.VID` files; `comparison.json` and `verify.py` independently
+  bind and check the saved bytes). `C613.VID` and `C614.VID` are the Scroll Up
+  full and partial CRLF replacement witnesses. Preserve these ignored
+  artifacts before removing the worktree.
+- Windows 11 Pro x64 `26300.9974`, Python 3.14.4, GCC 16.1.0. Open Watcom
+  `2026-11-01-Build`, x86 PE32 GUI 4.0, static CRT and identical direct
+  imports to the prior executable. Repaired `VCEDIT.EXE` SHA-256:
+  `b6a91e997f3a59f7b5032825e1bf2ab416c2b86545e9c41b8f0fd8059999bdf3`.
+- All four required local checks passed (exit 0): `python tools/editor.py
+  test`, `python tools/editor.py build`, `python tools/editor.py smoke`
+  and `python -m unittest discover -s tools -p test_play_capture.py`
+  (3 tests). The completed smoke covered 120 author/reopen cases, eight
+  adjacent sequences, 112 invalid duration refusals and eight valid
+  selection replacements. The first smoke command hit its 240-second
+  outer timeout (exit 143) without a reported assertion failure. Logs:
+  `.editor/ISSUE42-REVIEW3-test.txt`, `-build.txt`, `-smoke-complete.txt`,
+  `-unit.txt`; `-smoke.txt` is the interrupted run. `HOST-SMOKE.txt`
+  captures the completed smoke and `PE-IMPORTS.txt` details the build.
+- Reviewed the full README and updated the guest-only driver and duration
+  instructions. Focused XP paste checks do not qualify guest preview,
+  playback timing, 640×480 layout, Windows 98, physical hardware, the
+  original Amiga reader or an editor release. No original code or artwork,
+  guest disk or capture is published.
+
 ## Open blockers
 
 - The [five missing files](#recovered-and-missing-files) still need locating;

@@ -742,7 +742,9 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
         !control("BUTTON", "Add Slide O&ff Up", WS_TABSTOP, 464, 157, 118, 23, ADD_SLIDE_OFF_UP) ||
         !control("BUTTON", "Add Slide Off Do&wn", WS_TABSTOP, 332, 184, 118, 23, ADD_SLIDE_OFF_DOWN) ||
         !control("STATIC", "Ticks", 0, 464, 187, 42, 18, 0) ||
-        !(duration = control("EDIT", "25", WS_BORDER | WS_TABSTOP | ES_NUMBER | ES_AUTOHSCROLL,
+        /* A single-line EDIT can discard everything after a pasted line break. */
+        !(duration = control("EDIT", "25", WS_BORDER | WS_TABSTOP | ES_NUMBER |
+                             ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL,
                              510, 184, 72, 22, DURATION)) ||
         !control("BUTTON", "Add Sc&roll Up", WS_TABSTOP, 332, 211, 118, 23, ADD_SCROLL_UP) ||
         !control("BUTTON", "Add Scroll Dow&n", WS_TABSTOP, 464, 211, 118, 23, ADD_SCROLL_DOWN) ||

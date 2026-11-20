@@ -45,7 +45,7 @@ See the [milestone 3 evidence](PROGRESS.md#guest-verification).
 
 That guest-tested build predates the later timeline selection and drag
 fixes and the additional effects. Their preview checks remain Windows 11
-host evidence; the [focused XP paste regression](PROGRESS.md#native-paste-limit-repair)
+host evidence; the [focused XP paste regression](PROGRESS.md#native-multiline-paste-repair)
 is not guest preview qualification.
 The screenshot below shows the timeline-fixed editor before the additional
 effect controls, on that development host, not a 98 or XP run.
@@ -270,11 +270,12 @@ PASTETST.EXE --disposable-xp-guest VCEDIT.EXE PASTE.LOG
 ```
 
 The driver supplies synthetic guest clipboard text and exercises `WM_PASTE`,
-selection replacement, all eight transitions and valid durations including
-255. `PASTE.LOG` records 104 cases with exact saved-byte comparisons and a
-final failure count. Do not run it on a user's desktop or reuse a workspace
-containing earlier test saves. QEMU is not required by ordinary host checks;
-this focused regression is not full guest qualification.
+selection replacement, CRLF/LF/CR input, and valid durations including 255
+across all eight timed transitions. `PASTE.LOG` records 160 cases with exact
+saved-byte comparisons and a final failure count. Do not run it on a user's
+desktop or reuse a workspace containing earlier test saves. QEMU is not
+required by ordinary host checks; this focused regression is not full guest
+qualification.
 
 Launch `.editor\VCEDIT.EXE` with a single absolute, local workspace directory:
 
@@ -291,7 +292,8 @@ pictures to that folder first. It must be on local FAT on Windows 98.
    **Add Slide Off Down**, or choose **Add Scroll Up**, **Add Scroll Down**,
    **Add Reveal Up** or **Add Reveal Down**. The screen list selects the target
    for the next cue; **Ticks** sets the transition duration parameter
-   (1–255, default 25), in 25ths of a second.
+   (1–255, default 25), in 25ths of a second. Paste one duration, with no line
+   breaks.
 2. Drag the second cue's marker horizontally to a new start tick. Cues
    are kept in time order; a drop that would overlap is refused. **Play**
    (F5) starts from tick 0, **Stop** (Esc) holds the frame, and **Seek**

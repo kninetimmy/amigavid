@@ -132,7 +132,14 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
         { "valid-1", "25", "1", 0, -1, 1 },
         { "valid-25", "1", "25", 0, -1, 25 },
         { "valid-255", "25", "255", 0, -1, 255 },
-        { "replace-last-valid-255", "25", "55", 1, 2, 255 }
+        { "replace-last-valid-255", "25", "55", 1, 2, 255 },
+        { "replace-all-crlf", "7", "25\r\n256", 0, -1, 0 },
+        { "replace-last-crlf", "125", "2\r\n256", 1, 3, 0 },
+        { "replace-all-lf", "7", "25\n256", 0, -1, 0 },
+        { "replace-last-lf", "125", "2\n256", 1, 3, 0 },
+        { "replace-all-cr", "7", "25\r256", 0, -1, 0 },
+        { "replace-last-cr", "125", "2\r256", 1, 3, 0 },
+        { "trailing-crlf", "7", "25\r\n", 0, -1, 0 }
     };
     static const unsigned buttons[] = { 104, 112, 113, 114, 115, 116, 117, 118 };
     OSVERSIONINFOA version = { sizeof(OSVERSIONINFOA) };
@@ -144,6 +151,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
     PROCESS_INFORMATION process;
     FILE *file;
     unsigned effect, index, n, wanted;
+    const char *ch;
     int rejected, same, retained, whole;
     DWORD code;
     (void)instance; (void)previous; (void)show;
@@ -241,8 +249,14 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
             wanted = (unsigned)strlen(expected);
             same = n == wanted && !memcmp(observed, expected, wanted);
             retained = !cases[index].valid ? rejected : !rejected;
-            fprintf(logfile, "%s ID=%u %s field=[%s] whole=%d rejected=%d bytes=%u expected=%u exact=%d\n",
-                    same && retained && whole ? "PASS" : "FAIL", effect, cases[index].name, actual,
+            fprintf(logfile, "%s ID=%u %s field=[",
+                    same && retained && whole ? "PASS" : "FAIL", effect, cases[index].name);
+            for (ch = actual; *ch; ++ch)
+                if (*ch == '\r' || *ch == '\n')
+                    fputs(*ch == '\r' ? "\\r" : "\\n", logfile);
+                else
+                    fputc(*ch, logfile);
+            fprintf(logfile, "] whole=%d rejected=%d bytes=%u expected=%u exact=%d\n",
                     whole, rejected, n, wanted, same);
             fflush(logfile);
             if (!same || !retained || !whole)
@@ -256,7 +270,8 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
         CloseHandle(process.hProcess);
     }
     DestroyWindow(owner);
-    fprintf(logfile, "RESULT %u failures / 104 native paste cases\n", failures);
+    fprintf(logfile, "RESULT %u failures / %u native paste cases\n", failures,
+            (unsigned)(sizeof(buttons) / sizeof(buttons[0]) * sizeof(cases) / sizeof(cases[0])));
     fclose(logfile);
     return failures ? 1 : 0;
 }

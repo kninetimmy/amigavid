@@ -14,6 +14,9 @@
 #define VC_TICK_MS 40
 #define VC_CUT 1
 #define VC_SLIDE 2
+#define VC_SLIDE_ON_DOWN 3
+#define VC_SLIDE_OFF_UP 4
+#define VC_SLIDE_OFF_DOWN 5
 
 struct vc_screen {
     char first[VC_NAME], second[VC_NAME];
@@ -34,6 +37,7 @@ struct vc_project {
 
 struct vc_frame {
     unsigned top, bottom, split;  /* screen IDs (0 is black); split is a row. */
+    unsigned top_row, bottom_row; /* source row at the start of each region. */
 };
 
 const char *vc_picture_path(const char *name);

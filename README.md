@@ -15,6 +15,10 @@ artwork, milestone 3 delivered `VCEDIT.EXE`: a small native editor that
 loads two pictures, places a Straight Cut and a timed Slide On Up, and
 saves, reopens and replays the sequence.
 
+The first milestone 4 batch adds **Slide On Down**, **Slide Off Up** and
+**Slide Off Down**, preserving their original VC10 IDs (3, 4 and 5).
+These additions have Windows 11 host checks, not guest qualification.
+
 **The first useful workflow has been demonstrated in QEMU:** on Windows
 98 SE, add the pictures and effects, drag the transition's start time,
 save a `.vid` project, quit, reopen and replay. Then transfer that exact
@@ -24,8 +28,9 @@ output, accounting for the measured 98 display-color conversion.
 See the [milestone 3 evidence](PROGRESS.md#guest-verification).
 
 That guest-tested build predates the later timeline selection and drag
-fixes, which have been checked on Windows 11 only. The screenshot below
-shows the newer editor on that development host, not a 98 or XP run.
+fixes and the additional slides, which have been checked on Windows 11 only.
+The screenshot below shows the timeline-fixed editor before the additional
+slide controls, on that development host, not a 98 or XP run.
 Physical Windows 98/XP hardware, original Amiga-reader compatibility and
 full editor-release qualification remain unverified.
 
@@ -36,7 +41,7 @@ through Slide On Up. The two geometric test cards were created independently
 for this README and are publication-cleared; no archive artwork is shown.*
 [Capture provenance](PROGRESS.md#readme-illustration--issue-25).
 
-**Next: milestone 4** — add the remaining effects, animated 2D/3D vectors,
+**Continuing milestone 4** — add the remaining effects, animated 2D/3D vectors,
 QuadAnims, text and palette effects in small, tested batches. CD audio and
 the remaining editing workflows follow in milestone 5; this is not yet
 the complete Video Creator port.
@@ -229,8 +234,10 @@ pictures to that folder first. It must be on local FAT on Windows 98.
 
 1. Enter the first picture's filename, then **Open picture** (Ctrl+I).
    Choose **Add Straight Cut**. Open the second picture and choose
-   **Add Slide On Up**. The screen list selects the target for the next cue;
-   **Slide duration** is in 25ths of a second (default 25).
+   **Add Slide On Up**, **Add Slide On Down**, **Add Slide Off Up** or
+   **Add Slide Off Down**. The screen list selects the target for the next cue;
+   **Ticks** sets the slide duration parameter (1–255, default 25), in 25ths
+   of a second.
 2. Drag the second cue's marker horizontally to a new start tick. Cues
    are kept in time order; a drop that would overlap is refused. **Play**
    (F5) starts from tick 0, **Stop** (Esc) holds the frame, and **Seek**
@@ -267,9 +274,16 @@ indexed ILBM decoder with an editor canvas limit of 320×256. On indexed
 displays a frame is palette-realized when its colors fit a single logical
 palette; exactness on 8-bit hardware depends on the available entries.
 
+Slide On moves the incoming picture over the outgoing one; Slide Off moves
+the outgoing picture away to reveal the target. Source integer rounding
+can settle a slide before its timeline marker ends. The original one-tick
+**Slide Off Down** skips its screen swap and leaves the outgoing picture;
+the port preserves that quirk. Seek and Play use the same logical
+two-field-per-tick picture rows, not Amiga copper buffering or display tricks.
+
 The editor preserves active VC10 screen order, paired references, author,
-track number, and both supported effects' parameters and text. It previews
-the first member of a pair only; Psycho Flicker and CD audio are not
+track number, and all five supported effects' IDs, timing, parameters and text.
+It previews the first member of a pair only; Psycho Flicker and CD audio are not
 implemented. Other effect IDs, special screen IDs, object tables and
 malformed files are refused without replacing the open document. To replace a
 file, first open that file in the editor. A replacement stages and flushes

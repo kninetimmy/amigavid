@@ -223,6 +223,17 @@ python tools/editor.py test
 python tools/editor.py smoke
 ```
 
+For a fast, deterministic check of timed Play retry diagnostics, run separately:
+
+```powershell
+python -m unittest discover -s tools -p test_play_capture.py
+```
+
+These three tests use controlled stop ticks and frames; no archive, compiler,
+built executable or interactive desktop is needed. They check retry attempt
+order, immediate frame-mismatch failure and successful retry logging. They do
+not replace native `smoke`, measure playback timing or qualify Windows 98/XP.
+
 Launch `.editor\VCEDIT.EXE` with a single absolute, local workspace directory:
 
 ```powershell

@@ -626,6 +626,43 @@ expectations where a drawn body contains the pointer.
   this host check from earlier guest evidence. No Windows 98/XP guest,
   physical target or original-reader test was run for this build.
 
+**Vertical-drag selection (issue #24, 2026-11-20):**
+
+- A stationary click now requires unchanged x and y throughout observed
+  mouse movement and at release. Vertical movement retains the selected
+  cue, including an excursion back to the press point or a release at a
+  different y without a move message. Horizontal movement, grab offsets
+  and the existing two-pixel horizontal no-move rule are unchanged.
+- The expanded native smoke failed on the preserved issue #22 executable
+  (SHA-256
+  `17a7c76f77b13b7283103a218846493f307959a2856bb61a64fa72b885fafe7c`):
+  exit 1, `vertical retains the selected non-first cue: expected selected
+  cue at tick 11, got tick field '12'`. Failure evidence:
+  `.editor/ISSUE24-BASELINE-smoke.txt`.
+- `python tools/editor.py build`, `python tools/editor.py test` and
+  `python tools/editor.py smoke` each passed locally (exit 0), not in CI,
+  on Windows 11 x64 build 26300, NTFS, Python 3.14.4 and GCC 16.1.0.
+  The verified Open Watcom `2026-11-01-Build` pin, x86 PE32 GUI 4.0,
+  static WinMain, direct GDI32/KERNEL32/USER32 imports and absence of
+  delay imports are unchanged. `VCEDIT.EXE` SHA-256:
+  `3391163baa22b944936a4a5a9bf1f6de3978085bc43970c76499900aeefadb4e`.
+- At constant x17, smoke selects cue 11 among ticks 10/11/12, then
+  checks y320 → y330, y320 → y330 → y320, and y320 → release y330
+  without any move message. Each retains cue 11 with agreeing tick/status,
+  allows the next stationary click to cycle to 12, and saves unchanged
+  independent VC10 bytes. Existing horizontal drags, hit targeting,
+  captured-open cancellation, preview, playback and save/recovery cases
+  still pass. Model fixtures, 27 rejection cases and NT save checks pass.
+- Command logs are `.editor/ISSUE24-build.txt`, `-test.txt` and
+  `-smoke.txt`; native results and build evidence are
+  `.editor/HOST-SMOKE.txt` and `.editor/PE-IMPORTS.txt`. Existing verified
+  local toolchain and archive inputs sufficed; no setup download or
+  fixture publication was needed.
+- The full README was reviewed; its gesture and technical instructions
+  remain applicable. The overview/screenshots update stays with dependent
+  issue #25. This revision was not run on Windows 98/XP guests, physical
+  targets or an original Amiga reader; milestone 4 remains next.
+
 ### Guest verification
 
 **First implementation (before review fixes):**

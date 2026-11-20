@@ -256,6 +256,27 @@ def exercise(exe, digest, work, out):
         original = shared_markers(((10, 1), (11, 2), (12, 3), (44, 4), (4000, 5)))
         crowded.write_bytes(original)
         with launch() as (proc, hwnd):
+            for gesture, moves, end_y in (("vertical", (330,), 330),
+                                          ("vertical-return", (330, 320), 320),
+                                          ("vertical-release", (), 330)):
+                open_file(hwnd, crowded.name, 101)
+                for tick in (10, 11):
+                    click_track(hwnd, 17)
+                    expect_cue(hwnd, tick, f"{gesture} setup")
+                checked(send(hwnd, 0x0201, 1, 17 | (320 << 16), 2, 1000, None))
+                for y in moves:
+                    checked(send(hwnd, 0x0200, 1, 17 | (y << 16), 2, 1000, None))
+                checked(send(hwnd, 0x0202, 0, 17 | (end_y << 16), 2, 1000, None))
+                expect_cue(hwnd, 11, f"{gesture} retains the selected non-first cue")
+                click_track(hwnd, 17)
+                expect_cue(hwnd, 12, f"stationary click after {gesture}")
+                saved = work / f"{gesture}.vid"
+                open_file(hwnd, saved.name, 102)
+                require(saved.read_bytes() == original, f"{gesture} changed saved cue data")
+                log.append(f"PASS {gesture}: x17 press y320, moves {moves}, release y{end_y} retains cue 11 with matching tick/status; next stationary click cycles to 12; saved bytes unchanged.")
+            quit_editor(proc, hwnd)
+
+        with launch() as (proc, hwnd):
             for start, end in ((564, 564), (564, 85), (17, 85)):
                 open_file(hwnd, crowded.name, 101)
                 for tick in (10, 11):

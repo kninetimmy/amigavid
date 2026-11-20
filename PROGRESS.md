@@ -36,11 +36,22 @@ Recovered retail content:
   source-ZIP catalog entries.** This comparison is case-insensitive filename
   only, not path matching, byte identity, format validation or rendering evidence.
 
-Seven original files remain missing from the inspected source ZIP and retail disc:
+**Two compiled payloads recovered:** `vc:vectors/TEST` (an 84-byte `VECT`
+quadrilateral) and `SineTable.bin` (6,144 bytes) were recovered from the
+source ZIP's `vc/3dvectorcode.obj`. Each matches byte-for-byte in all four
+editors: source ZIP `vc/editor` and `vc/editordb`, plus retail `editor` and
+`editord`. `TEST`'s final zero may be assembler `EVEN` alignment padding
+rather than part of the standalone file. Standalone originals remain welcome
+for provenance.
+
+All 918,572 bytes of retail `vec.cdfastload` are accounted for: it is
+byte-identical to the concatenation of all 41 known animations, with no
+additional bytes.
+
+Five files remain missing from the inspected source ZIP and retail disc:
 
 - Datatype helper source: `DT_STUFF.S` (the source ZIP has `dt_stuff.o` only).
-- Developer tables/include: `vc:vectors/TEST`, `SineTable.bin`,
-  `vc:vectors/Macros.i`.
+- Developer include: `vc:vectors/Macros.i`.
 - Source-catalog VecAnims: `dancer2.vec`, `dancer5.vec`, `dancer7.vec`.
 
 The retail image has **Track 01 MODE1/2352 data** and **Track 02 AUDIO**.
@@ -1166,9 +1177,10 @@ the refusal; probe, archive, viewer and release instructions still apply.
 
 ## Open blockers
 
-- The [seven missing files](#recovered-and-missing-files) still need locating;
-  recovered retail projects, fonts and vector filenames do not resolve the
-  missing developer source/tables or the separate reader/fidelity checks.
+- The [five missing files](#recovered-and-missing-files) still need locating;
+  the two compiled payloads are recovered, though standalone originals remain
+  welcome for provenance. Recovered retail projects, fonts, vector filenames
+  and payloads do not resolve the separate reader/fidelity checks.
 - Bundled third-party code and media need separate redistribution review,
   including recovered retail content and the Commodore-Amiga notice in
   `vc/modules/screen.c`.

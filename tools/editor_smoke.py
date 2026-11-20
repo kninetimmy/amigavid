@@ -101,7 +101,7 @@ def play_capture(tick, expected, stop, frame, log):
                      f"stop ticks by attempt: {stops} (None means no stop observed)")
 
 
-def exercise(exe, digest, work, out):
+def exercise(exe, digest, work, evidence):
     user = ct.WinDLL("user32", use_last_error=True)
     gdi = ct.WinDLL("gdi32", use_last_error=True)
     callback = ct.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
@@ -211,7 +211,7 @@ def exercise(exe, digest, work, out):
 
     @contextmanager
     def launch():
-        with subprocess.Popen([exe, work], cwd=out) as proc:
+        with subprocess.Popen([exe, work], cwd=work.parent) as proc:
             try:
                 hwnd = until(proc, lambda: find(proc.pid, "AmigaVidEditor"), "main editor window")
                 yield proc, hwnd
@@ -296,6 +296,10 @@ def exercise(exe, digest, work, out):
         edit(hwnd, 109, name)
         command(hwnd, button, modal)
 
+    def retain(name, data):
+        with (evidence / name).open("xb") as stream:
+            stream.write(data)
+
     log = [platform.platform(), f"{digest}  {exe.name}"]
     names = "BG~1.IFF", NAMES[1]
     (work / names[0]).write_bytes((work / NAMES[0]).read_bytes())
@@ -337,11 +341,11 @@ def exercise(exe, digest, work, out):
                     for sampled, expected in checks_first.items():
                         pixels = capture(proc, hwnd, sampled, expected)
                         if effect >= 10:
-                            (out / f"peel-first-{effect}-{duration}-{start}-{sampled}.rgb").write_bytes(pixels)
+                            retain(f"peel-first-{effect}-{duration}-{start}-{sampled}.rgb", pixels)
                     open_file(hwnd, saved.name, 102)
                     require(saved.read_bytes() == expected_bytes, "first transition authored fields differ")
                     if effect >= 10:
-                        (out / saved.name).write_bytes(saved.read_bytes())
+                        retain(saved.name, saved.read_bytes())
                     quit_editor(proc, hwnd)
                 with launch() as (proc, hwnd):
                     open_file(hwnd, saved.name, 101)
@@ -385,12 +389,12 @@ def exercise(exe, digest, work, out):
                 for sampled, expected in checks_slide.items():
                     pixels = capture(proc, hwnd, sampled, expected)
                     if effect >= 10:
-                        (out / f"peel-cut-{effect}-{duration}-{sampled}.rgb").write_bytes(pixels)
+                        retain(f"peel-cut-{effect}-{duration}-{sampled}.rgb", pixels)
                 open_file(hwnd, saved.name, 102)
                 require(saved.read_bytes() == expected_bytes,
                         f"{label}, a={duration}: authored fields differ")
                 if effect >= 10:
-                    (out / saved.name).write_bytes(saved.read_bytes())
+                    retain(saved.name, saved.read_bytes())
                 quit_editor(proc, hwnd)
             with launch() as (proc, hwnd):
                 open_file(hwnd, saved.name, 101)
@@ -495,7 +499,7 @@ def exercise(exe, digest, work, out):
                     require(adjacent.read_bytes() == following,
                             f"{label}, a={duration}: adjacent cue fields changed")
                     if effect >= 10:
-                        (out / adjacent.name).write_bytes(adjacent.read_bytes())
+                        retain(adjacent.name, adjacent.read_bytes())
                     log.append(f"PASS ID {effect}, a={duration}: adjacent Slide at {following_tick}, "
                                "exact Seek/Play frames and saved fields; no prior row state.")
                 quit_editor(proc, hwnd)
@@ -517,7 +521,7 @@ def exercise(exe, digest, work, out):
                     "save unchanged bytes; native replacement to 255 saves exact fields; invalid import durations, "
                    "unsupported IDs, conflicting imports/drags "
                    "preserve the open sequence.")
-    with unsafe_links(work, out):
+    with unsafe_links(work, work.parent):
         (work / "link.vid").write_bytes(FIXTURE.replace(b"Tvc0dppm/27", b"Mjol0dppm/27"))
         (work / "extra.iff").write_bytes((work / NAMES[0]).read_bytes())
         (work / "hard.iff").hardlink_to(work / "extra.iff")
@@ -846,8 +850,7 @@ def exercise(exe, digest, work, out):
             log.append("PASS multiply-linked and locked replacements preserved original bytes; eligible retry cleaned staging.")
             log.append("PASS simulated interrupted replacement: retry left the prior .bak intact for manual recovery.")
     log.append(f"First save SHA-256: {sha(intended)}")
-    (out / "HOST-SMOKE.txt").write_text("\n".join(log) + "\n", encoding="utf-8")
-    print("\n".join(log))
+    return "\n".join(log) + "\n"
 
 
 @contextmanager

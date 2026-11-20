@@ -980,8 +980,10 @@ the refusal; probe, archive, viewer and release instructions still apply.
   `python tools/editor.py build`, `python tools/editor.py test` and
   `python tools/editor.py smoke`. Command logs are
   `.editor/ISSUE28-build-final.txt`, `ISSUE28-test-final.txt` and
-  `ISSUE28-smoke-final.txt`; native results and build provenance are
-  `.editor/HOST-SMOKE.txt` and `.editor/PE-IMPORTS.txt`.
+  `ISSUE28-smoke-final.txt`; native results (`HOST-SMOKE.txt`) and build
+  provenance (`PE-IMPORTS.txt`) are preserved in the primary checkout under
+  `inputs/issue-28-6a32881/.editor/issue28-startup-old-6310ebe/`, not alongside
+  the repaired build's records.
 - Host: Windows 11 Pro x64 `26300.9974`, NTFS, Python 3.14.4 and
   GCC 16.1.0. The build uses the unchanged verified Open Watcom
   `2026-11-01-Build` pin: x86 PE32 GUI 4.0, static WinMain,
@@ -1043,8 +1045,9 @@ the refusal; probe, archive, viewer and release instructions still apply.
   and `python tools/editor.py smoke` each **passed (exit 0)** on the same
   Windows 11 host, not CI. Logs are `.editor/ISSUE28-STARTUP-build.txt`,
   `ISSUE28-STARTUP-test.txt` and `ISSUE28-STARTUP-smoke.txt`; full native
-  results and build provenance remain `.editor/HOST-SMOKE.txt` and
-  `.editor/PE-IMPORTS.txt`. All 24 first-slide and 24 Cut-then-slide
+  results (`HOST-SMOKE.txt`) and build provenance (`PE-IMPORTS.txt`) for the
+  repaired build are preserved in the primary checkout under
+  `inputs/issue-28-6a32881/.editor/`. All 24 first-slide and 24 Cut-then-slide
   cases passed, along with the existing artwork, metadata, rejection,
   timeline, containment and save/recovery checks. The PE profile and
   Watcom pin are unchanged. `VCEDIT.EXE` SHA-256:
@@ -1089,6 +1092,33 @@ the refusal; probe, archive, viewer and release instructions still apply.
   including setup, controls, save protection and host/guest limits.
   No editor runtime, Windows 98/XP qualification or next-batch scope changed;
   original inputs and generated artifacts remain private and ignored.
+
+### Documentation and test follow-ups — issues #32–#34 (2026-11-20)
+
+- Issue #32 / PR #35 replaced the placement test's struct-assignment
+  snapshot with `memcpy`, removing padding dependence from its byte comparison.
+  The executor's `python tools/editor.py test` **passed (exit 0)**.
+- Issue #33 / PR #36 changed the exhausted-retry fixture to non-monotonic
+  stops 13/11/12 targeting tick 10, so sorting cannot satisfy the attempt-order
+  assertion. The executor's
+  `python -m unittest discover -s tools -p test_play_capture.py`
+  **passed (3 tests, exit 0)**. An in-memory sorting mutation failed only
+  the order assertion. Both PRs passed independent review; the reviews did
+  not rerun tests. Neither check was run by CI.
+- Issue #34 corrected the preserved initial issue #28 evidence pointers,
+  separately from the startup-repaired build, and added the deterministic
+  retry command to README. Locally on Windows with Python 3.14.4,
+  `python -m unittest discover -s tools -p test_play_capture.py`
+  **passed (3 tests, exit 0)**; `git diff --check HEAD^ HEAD`
+  **passed (exit 0)** for this documentation commit. Neither is run by CI.
+- The full README was reviewed against the shipped tools and recorded
+  evidence: probe, archive, viewer, editor controls, save protection and
+  release guidance remain current. The new retry instructions explicitly
+  distinguish controlled tests from native smoke and Windows 98/XP
+  qualification. Earlier build, native smoke and guest results above remain
+  historical; none was rerun for this docs-only change. No private artifacts
+  were copied or published. Scroll/Reveal remains the next candidate batch,
+  subject to separate approval.
 
 ## Open blockers
 

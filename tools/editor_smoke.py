@@ -12,14 +12,14 @@ import time
 
 from _winapi import CreateJunction
 from asset import FIXTURE_PINS, NAMES
-from editor import FIXTURE, HDR, SLIDE_SAMPLES, require
+from editor import FIRST_SLIDE_SAMPLES, FIXTURE, HDR, SLIDE_SAMPLES, require
 
 
-def authored(first, second, tick, duration, effect=2):
+def authored(first, second, tick, duration, effect=2, cut=True):
     names = [bytes(c + 1 for c in ("VCPics:" + path).encode("ascii"))
              for path in (first, second)]
-    return (HDR + b"AUTHOR\n1\n2\n" + b"\nZIP\n".join(names) + b"\nZIP\n"
-            b"0\n0\n0\n2\n0\n1\n6\n0\n0\n0\n0\n0\n0\nNOTEXT\n" +
+    return (HDR + b"AUTHOR\n1\n2\n" + b"\nZIP\n".join(names) + b"\nZIP\n0\n0\n0\n" +
+            (b"2\n0\n1\n6\n0\n0\n0\n0\n0\n0\nNOTEXT\n" if cut else b"1\n") +
             f"{tick}\n{effect}\n7\n{duration}\n0\n0\n0\n0\n0\nNOTEXT\n".encode("ascii"))
 
 
@@ -220,18 +220,23 @@ def exercise(exe, digest, work, out):
         # SetTimer can coalesce/skip ticks. Supplement it with paced WM_TIMER
         # through the unchanged Play handler and real GetTickCount clock, not
         # Seek or a test-only renderer. Normal completion is checked separately.
-        command(hwnd, 105)
-        expires = time.monotonic() + 10
-        while time.monotonic() < expires and proc.poll() is None:
-            checked(send(hwnd, 0x0113, 1, 0, 2, 1000, None))
-            if int(control_text(hwnd, 111)) >= tick:
-                command(hwnd, 106)
-                require(control_text(hwnd, 111) == str(tick),
-                        f"timed Play skipped requested tick {tick}")
-                require(sha(frame(hwnd)) == expected, f"timed Play frame at tick {tick}")
-                return
-            time.sleep(.001)
-        raise ValueError(f"timed Play did not reach tick {tick}")
+        # Stop before reading the tick used for the comparison. A scheduled
+        # timer may win the race with Stop; retry that sample, never a mismatch.
+        for _ in range(3):
+            command(hwnd, 105)
+            expires = time.monotonic() + 10
+            while time.monotonic() < expires and proc.poll() is None:
+                checked(send(hwnd, 0x0113, 1, 0, 2, 1000, None))
+                if int(control_text(hwnd, 111)) >= tick:
+                    command(hwnd, 106)
+                    actual = int(control_text(hwnd, 111))
+                    if actual == tick:
+                        require(sha(frame(hwnd)) == expected, f"timed Play frame at tick {tick}")
+                        return
+                    log.append(f"RETRY timed Play skipped tick {tick}, stopped at {actual}.")
+                    break
+                time.sleep(.001)
+        raise ValueError(f"timed Play did not stop at tick {tick} in three attempts")
 
     def click_track(hwnd, x, y=320):
         for msg, wp in ((0x0201, 1), (0x0202, 0)):
@@ -270,6 +275,41 @@ def exercise(exe, digest, work, out):
     cards = [row_card(second) for second in (False, True)]
     for name, (data, _) in zip(("ROWSA.IFF", "ROWSB.IFF"), cards):
         (work / name).write_bytes(data)
+    for effect, button in ((2, 104), (3, 112), (4, 113), (5, 114)):
+        for duration, samples in FIRST_SLIDE_SAMPLES.items():
+            print(f"CHECK first slide ID {effect}, a={duration}, start=0", flush=True)
+            expected_bytes = authored("ROWSA.IFF", "ROWSB.IFF", 0, duration, effect, cut=False)
+            saved = work / f"first-{effect}-{duration}.vid"
+            checks_first = {
+                sampled: sha(slide_pixels(effect, duration, sampled, moved,
+                                          bytes(320 * 256 * 3), cards[1][1]))
+                for sampled, moved in samples
+            }
+            with launch() as (proc, hwnd):
+                open_file(hwnd, "ROWSA.IFF", 100)
+                open_file(hwnd, "ROWSB.IFF", 100)
+                edit(hwnd, 110, duration)
+                command(hwnd, button)
+                for sampled, expected in checks_first.items():
+                    capture(proc, hwnd, sampled, expected)
+                open_file(hwnd, saved.name, 102)
+                require(saved.read_bytes() == expected_bytes, "first slide authored fields differ")
+                quit_editor(proc, hwnd)
+            with launch() as (proc, hwnd):
+                open_file(hwnd, saved.name, 101)
+                for sampled, expected in reversed(tuple(checks_first.items())):
+                    capture(proc, hwnd, sampled, expected)
+                for sampled, expected in checks_first.items():
+                    play_capture(proc, hwnd, sampled, expected)
+                command(hwnd, 105)
+                until(proc, lambda: find_child(hwnd, None, "STATIC", "Playback complete."),
+                      "first slide playback completion")
+                require(sha(frame(hwnd)) == next(reversed(checks_first.values())),
+                        "first slide final frame")
+                quit_editor(proc, hwnd)
+            log.append(f"PASS first slide ID {effect}, a={duration}, start=0: "
+                       f"author/save/restart/reopen, Seek and Play at ticks {tuple(checks_first)}, "
+                       "exact 81,920-pixel black/row-card comparisons and final frame.")
     for effect, button, label in ((2, 104, "Slide On Up"), (3, 112, "Slide On Down"),
                                  (4, 113, "Slide Off Up"), (5, 114, "Slide Off Down")):
         for duration, samples in SLIDE_SAMPLES.items():

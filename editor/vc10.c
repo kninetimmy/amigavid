@@ -299,9 +299,10 @@ struct vc_frame vc_at(const struct vc_project *project, unsigned long tick)
             continue;
         if (cue->effect != VC_CUT && tick - cue->tick < 128) {
             step = (256 + (2 * cue->a - 1) - 1) / (2 * cue->a - 1);
-            /* MainLoop starts at field 2*Time; DoDisplay steps before
-               rendering. Sample after both logical fields of this tick. */
-            distance = (2 * (tick - cue->tick) + 2) * step;
+            /* Startup Bodge2 consumes field 0, so tick-zero slides start at
+               field 1. Later cues still start at 2*Time. DoDisplay steps
+               before rendering; sample after both fields of this tick. */
+            distance = (2 * (tick - cue->tick) + 2 - (cue->tick == 0)) * step;
             if (distance < 255) {
                 frame.split = 255 - (unsigned)distance;
                 frame.bottom = cue->screen;

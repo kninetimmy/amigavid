@@ -314,9 +314,12 @@ those disks were not booted again for this re-verification.
   is not attributed to all original effects (one-shot effects differ).
 - **Clock and fields:** `audio.c::GetCurrentCDTime` divides track-relative
   75 Hz sectors by three. `mainloop.c::MainLoop` activates a timed effect
-  when `MainTime >= Time*2` and calls `fx.c::DoDisplay` once per field.
+  when `MainTime >= Time*2`, but dispatches only one queued effect per
+  field: startup `Bodge2` consumes field 0, delaying a first supported cue
+  at tick 0 until field 1. It calls `fx.c::DoDisplay` once per field.
   VCEDIT uses 40 ms timeline ticks; deterministic Seek samples the logical
-  output after two field updates per tick. It does not reproduce Amiga
+  output after both fields of each tick (only one slide update at tick 0
+  for a slide starting there). It does not reproduce Amiga
   copper-list buffering or sync playback to a CD.
 - **Effects:** `neweffects.c::InitVEffectClasses` registers `VET_Cut=1`
   and `VET_SlideOnUp=2`, both `OC_SCREEN`. `CutInit`/`CutFunc` in `fx.c`
@@ -930,8 +933,13 @@ the refusal; probe, archive, viewer and release instructions still apply.
   retain the milestone 3 grammar.
 - `neweffects.c::CalculateParam` gives `ceil(256/(2*a-1))` rows per field;
   `CalculateLength` separately reserves
-  `floor(ceil(256/ceil(256/(2*a)))/2)+1` ticks. `mainloop.c::MainLoop`
-  activates at `Time*2`; `fx.c::DoDisplay` steps before Func/End.
+  `floor(ceil(256/ceil(256/(2*a)))/2)+1` ticks.
+  `mainloop.c:489–516,556–595` queues startup `Bodge2` ahead of the first
+  supported cue and dispatches at most one queued effect per field.
+  Thus a first slide at tick 0 activates at field 1, not field 0.
+  A first cue at a positive tick and later cues still activate at
+  `Time*2`; `fx.c::DoDisplay` steps before Func/End for all four slides,
+  including the existing Slide On Up (2).
   Preview samples after both logical fields of each 40 ms tick.
 - `fx.c::SlideOnDownInit/Func/End`, `SlideOffUpInit/Func/End` and
   `SlideOffDownInit/Func/End` supply the screen swap, split and source-row
@@ -945,8 +953,13 @@ the refusal; probe, archive, viewer and release instructions still apply.
   | Slide Off Down (5) | `Value` | incoming / 0 | outgoing / 0 |
 
   Down values increase from 0; Off Up decreases from 255. At `a=25`,
-  sampled movement distances are 12, 132 and 252 rows at relative ticks
-  0, 10 and 20; tick 21 is settled. At `a=1`, speed 256 reaches End
+  a tick-zero slide moves 6, 126 and 246 rows at ticks 0, 10 and 20;
+  tick 21 is settled. Its tick-zero split is 6 for IDs 3/5 and 249 for
+  IDs 2/4. A slide starting later still moves 12, 132 and 252 rows at
+  relative ticks 0, 10 and 20, settling at relative tick 21.
+  At `a=65`, a tick-zero slide is still moving at tick 63 (254 rows),
+  settling at 64; a later slide settles at relative tick 63.
+  At `a=1`, speed 256 reaches End
   before Func: On Down and Off Up select the target, but **Off Down keeps
   the outgoing picture**, since its End only removes screen 2 and its
   first Func never swaps the base. This source quirk is deliberately
@@ -962,7 +975,8 @@ the refusal; probe, archive, viewer and release instructions still apply.
 
 ### Host verification
 
-- Final local commands, each **passed (exit 0)**, not run by CI:
+- Initial implementation at `6310ebe` (before the startup repair below):
+  local commands each **passed (exit 0)**, not run by CI:
   `python tools/editor.py build`, `python tools/editor.py test` and
   `python tools/editor.py smoke`. Command logs are
   `.editor/ISSUE28-build-final.txt`, `ISSUE28-test-final.txt` and
@@ -1000,6 +1014,53 @@ the refusal; probe, archive, viewer and release instructions still apply.
   source quirk are documented; the older illustration and guest evidence
   are explicitly distinguished. Original inputs, builds and captures stay
   private under ignored local directories.
+
+### Startup timing review repair
+
+- The first implementation counted two slide steps at the end of tick 0.
+  The shared `vc_at` timing now subtracts the single startup field only
+  for tick-zero slides, covering IDs 2–5 without shifting positive-start
+  cues or changing placement lengths. Duration-1 Slide Off Down still
+  retains the outgoing picture (startup black for a first cue).
+- The independent first-slide regression failed against the preserved
+  `6310ebe` executable: native smoke exited 1 at ID 2, duration 2, tick 0.
+  The model check also exited 1: split 83 instead of the source-derived
+  169. Logs: `.editor/ISSUE28-STARTUP-old-smoke.txt` and `-old-test.txt`.
+  The old executable, import report and original smoke results remain in
+  `.editor/issue28-startup-old-6310ebe/`. The pinned original-source
+  inspection is `.editor/ISSUE28-STARTUP-source.txt`; these are private.
+  A separate old-head model probe confirms the wrong tick-zero splits at
+  duration 25 and premature settlement at duration 65/tick 63 for every
+  ID 2–5: `.editor/ISSUE28-STARTUP-old-boundaries.txt` (eight mismatches).
+- First-slide expectations are independent literal field samples at
+  durations 1, 2, 19, 25, 65 and 255. Native controls author the first
+  slide at tick 0; full 81,920-pixel black/row-card comparisons check
+  first, intermediate, last-moving and settled ticks as applicable,
+  before/after save and restart, with backward Seek and clock-paced Play.
+  Model checks also cover a first cue at tick 1 and a later Cut at 400.
+  The existing Cut-then-slide cases now include duration 65.
+- Local `python tools/editor.py build`, `python tools/editor.py test`
+  and `python tools/editor.py smoke` each **passed (exit 0)** on the same
+  Windows 11 host, not CI. Logs are `.editor/ISSUE28-STARTUP-build.txt`,
+  `ISSUE28-STARTUP-test.txt` and `ISSUE28-STARTUP-smoke.txt`; full native
+  results and build provenance remain `.editor/HOST-SMOKE.txt` and
+  `.editor/PE-IMPORTS.txt`. All 24 first-slide and 24 Cut-then-slide
+  cases passed, along with the existing artwork, metadata, rejection,
+  timeline, containment and save/recovery checks. The PE profile and
+  Watcom pin are unchanged. `VCEDIT.EXE` SHA-256:
+  `d8a5240a5f0498b3ccb40a352a8217eceae29b49c201a7faf9de483146091a6d`.
+- The expanded Play sampling stops before reading the tick used for its
+  frame comparison. A skipped sample can restart Play at most twice and
+  is logged; a frame mismatch at the requested stopped tick still fails
+  immediately. This bounds scheduling/race failures without changing
+  the editor clock or claiming jitter qualification. The nonblocking
+  struct-assignment/padding snapshot in `model_test.c` was not changed;
+  replacing that snapshot with `memcpy` remains a separate test cleanup.
+- The full README was reviewed again and remains current: controls,
+  commands, source quirk and host/guest limits match the shipped editor.
+  No original-source or capture publication, Windows 98/XP guest run,
+  physical-hardware test or original-reader qualification was added.
+  The next-batch candidate remains Scroll/Reveal, subject to separate approval.
 
 ## Open blockers
 

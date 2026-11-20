@@ -84,13 +84,25 @@ TILDE_FIXTURE = (FIXTURE.replace(b"WDQjdt;Xbsn!Bsu/jgg", b"WDQjdt;XBSN\x7f2/JGG"
 
 # Source-derived field samples, not output from vc_at. Each moving sample is
 # (tick since start, total rows stepped); None means End has already run.
-# CalculateParam + DoDisplay: steps 256, 86, 7, 6 and 1 respectively.
+# CalculateParam + DoDisplay: steps 256, 86, 7, 6, 2 and 1 respectively.
 SLIDE_SAMPLES = {
     1: ((-1, 0), (0, None), (1, None)),
     2: ((-1, 0), (0, 172), (1, None), (2, None)),
     19: ((-1, 0), (0, 14), (8, 126), (17, 252), (18, None)),
     25: ((-1, 0), (0, 12), (10, 132), (20, 252), (21, None)),
+    65: ((-1, 0), (0, 4), (31, 128), (62, 252), (63, None)),
     255: ((-1, 0), (0, 2), (63, 128), (126, 254), (127, None)),
+}
+
+# MainLoop dispatches Bodge2 at field 0, then a first slide at field 1.
+# Independent end-of-tick samples: one update at tick 0, then two per tick.
+FIRST_SLIDE_SAMPLES = {
+    1: ((0, None), (1, None)),
+    2: ((0, 86), (1, None), (2, None)),
+    19: ((0, 7), (8, 119), (17, 245), (18, None)),
+    25: ((0, 6), (10, 126), (20, 246), (21, None)),
+    65: ((0, 2), (31, 126), (63, 254), (64, None)),
+    255: ((0, 1), (63, 127), (126, 253), (127, None)),
 }
 
 
@@ -161,7 +173,42 @@ def test():
                     require(parse(bad).returncode == 1,
                             f"slide {effect} accepted invalid duration {invalid}")
         print("PASS all four slides: exact LF/CRLF fields and source row offsets at durations "
-              "1/2/19/25/255; 12 invalid durations; atomic placement rejection and legal boundaries")
+              "1/2/19/25/65/255; invalid durations; atomic placement rejection and legal boundaries")
+        for effect in range(2, 6):
+            for duration, samples in FIRST_SLIDE_SAMPLES.items():
+                # Remove the initial Cut: the outgoing picture is startup black.
+                data = (FIXTURE.replace(b"0\n0\n0\n3\n0\n1\n6\n0\n40\n30\n20\n10\n0\nNOTEXT\n",
+                                        b"0\n0\n0\n2\n")
+                        .replace(b"50\n2\n7\n19\n",
+                                 f"0\n{effect}\n7\n{duration}\n".encode("ascii"))
+                        .replace(b"80\n1\n8\n", b"400\n1\n8\n"))
+                for start in (0, 1):
+                    encoded = data.replace(f"0\n{effect}\n7\n".encode("ascii"),
+                                           f"{start}\n{effect}\n7\n".encode("ascii"))
+                    result = parse(encoded)
+                    require(result.returncode == 0 and output.read_bytes() == encoded,
+                            f"first slide {effect}, a={duration}, start={start}: round-trip")
+                    frames = {r[0]: r[1:] for r in
+                              (tuple(map(int, ln.split())) for ln in result.stdout.splitlines())}
+                    # A first cue at tick 1 is not delayed: Bodge2 is already done.
+                    for elapsed, moved in (SLIDE_SAMPLES[duration] if start else samples):
+                        if elapsed < 0 or (effect == 5 and duration == 1):
+                            expected = (0, 0, 256, 0, 0)
+                        elif moved is None:
+                            expected = (7, 0, 256, 0, 0)
+                        else:
+                            expected = {
+                                2: (0, 7, 255 - moved, 0, 0),
+                                3: (7, 0, moved, 256 - moved, moved),
+                                4: (0, 7, 255 - moved, moved + 1, 255 - moved),
+                                5: (7, 0, moved, 0, 0),
+                            }[effect]
+                        require(frames[start + elapsed] == expected,
+                                f"first slide {effect}, a={duration}, tick {start + elapsed}: "
+                                f"{frames[start + elapsed]} != {expected}")
+                    require(frames[400] == (8, 0, 256, 0, 0), "startup shifted later Cut")
+        print("PASS first slides IDs 2-5: startup field exception at 1/2/19/25/65/255, "
+              "no delay at tick 1, later Cut unchanged")
         rejects = [
             ("UTF-8 header", FIXTURE.replace(b"\xa9", b"\xc2\xa9")),
             ("old-style fields", HDR + b"7\nVCPics:fake.16\n0\n"),

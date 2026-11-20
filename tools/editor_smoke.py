@@ -64,6 +64,21 @@ def shared_markers(cues):
                      for tick, identity in cues))
 
 
+def play_capture(tick, expected, stop, frame, log):
+    stops = []
+    for _ in range(3):
+        actual = stop()
+        stops.append(actual)
+        if actual == tick:
+            require(hashlib.sha256(frame()).hexdigest() == expected,
+                    f"timed Play frame at tick {tick}")
+            return
+        if actual is not None:
+            log.append(f"RETRY timed Play skipped tick {tick}, stopped at {actual}.")
+    raise ValueError(f"timed Play did not stop at tick {tick} in three attempts; "
+                     f"stop ticks by attempt: {stops} (None means no stop observed)")
+
+
 def exercise(exe, digest, work, out):
     user = ct.WinDLL("user32", use_last_error=True)
     gdi = ct.WinDLL("gdi32", use_last_error=True)
@@ -216,27 +231,19 @@ def exercise(exe, digest, work, out):
         return until(proc, lambda: (data := frame(hwnd)) and sha(data) == expected_hash and data,
                      f"expected full preview at tick {tick}")
 
-    def play_capture(proc, hwnd, tick, expected):
+    def play_stop(proc, hwnd, tick):
         # SetTimer can coalesce/skip ticks. Supplement it with paced WM_TIMER
         # through the unchanged Play handler and real GetTickCount clock, not
         # Seek or a test-only renderer. Normal completion is checked separately.
-        # Stop before reading the tick used for the comparison. A scheduled
-        # timer may win the race with Stop; retry that sample, never a mismatch.
-        for _ in range(3):
-            command(hwnd, 105)
-            expires = time.monotonic() + 10
-            while time.monotonic() < expires and proc.poll() is None:
-                checked(send(hwnd, 0x0113, 1, 0, 2, 1000, None))
-                if int(control_text(hwnd, 111)) >= tick:
-                    command(hwnd, 106)
-                    actual = int(control_text(hwnd, 111))
-                    if actual == tick:
-                        require(sha(frame(hwnd)) == expected, f"timed Play frame at tick {tick}")
-                        return
-                    log.append(f"RETRY timed Play skipped tick {tick}, stopped at {actual}.")
-                    break
-                time.sleep(.001)
-        raise ValueError(f"timed Play did not stop at tick {tick} in three attempts")
+        # Stop before reading the tick used for the comparison.
+        command(hwnd, 105)
+        expires = time.monotonic() + 10
+        while time.monotonic() < expires and proc.poll() is None:
+            checked(send(hwnd, 0x0113, 1, 0, 2, 1000, None))
+            if int(control_text(hwnd, 111)) >= tick:
+                command(hwnd, 106)
+                return int(control_text(hwnd, 111))
+            time.sleep(.001)
 
     def click_track(hwnd, x, y=320):
         for msg, wp in ((0x0201, 1), (0x0202, 0)):
@@ -300,7 +307,8 @@ def exercise(exe, digest, work, out):
                 for sampled, expected in reversed(tuple(checks_first.items())):
                     capture(proc, hwnd, sampled, expected)
                 for sampled, expected in checks_first.items():
-                    play_capture(proc, hwnd, sampled, expected)
+                    play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
+                                 lambda: frame(hwnd), log)
                 command(hwnd, 105)
                 until(proc, lambda: find_child(hwnd, None, "STATIC", "Playback complete."),
                       "first slide playback completion")
@@ -341,7 +349,8 @@ def exercise(exe, digest, work, out):
                 for sampled, expected in reversed(tuple(checks_slide.items())):
                     capture(proc, hwnd, sampled, expected)
                 for sampled, expected in checks_slide.items():
-                    play_capture(proc, hwnd, sampled, expected)
+                    play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
+                                 lambda: frame(hwnd), log)
                 command(hwnd, 105)
                 until(proc, lambda: find_child(hwnd, None, "STATIC", "Playback complete."),
                       f"{label}, a={duration}: playback completion")

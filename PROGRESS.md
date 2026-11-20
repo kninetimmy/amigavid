@@ -141,9 +141,9 @@ validation. The Windows 11 `/noaudio` check above remains simulated.
   x86 PE32 GUI, OS/subsystem 4.0, static `WinMain` startup, and direct
   GDI32, KERNEL32 and USER32 imports (no WinMM, CRT DLL or delay imports).
   `VCASSET.EXE` SHA-256:
-  `d2fbc0c3a1ab8213fb238fcf0b5669bce8334973dc008a88b96cff95de2c4d85`.
+  `c77277f639030c9bcd5e4022e88a1563ed9043507e3c81eb362c92ad5b14d163`.
   `.asset/PE-IMPORTS.txt` and `.asset/viewer.map` are local build evidence.
-  The correction did not change the direct import list. `NtOpenFile` and
+  The palette correction did not change the direct DLL list. `NtOpenFile` and
   `QueryDosDeviceW` are resolved at runtime on NT only.
 - **Viewer host smoke pass:** Windows 11 Pro x64 build 26300.9974. The
   viewer opened and switched images from a root with spaces and a
@@ -173,22 +173,128 @@ validation. The Windows 11 `/noaudio` check above remains simulated.
 | `blankeditor.iff` | `268d851d1941790a3019c94c3a3b8319259246680808b969b8d768923fa3b9bf` |
 | `blueface.16` | `622a27248ed4f36102cd514712c0e1a83667cb114b1afa9c153b33cced55e585` |
 
-**Outstanding viewer checks:** Windows 98 FE, 98 SE, x86 XP RTM and x86 XP
-SP3 have not run this viewer; the four guest passes above are probe results
-only. Check the viewer loader/imports, 9x FAT path branch, XP handle-relative
-opens, native display on legacy color modes, and both open/repaint/recovery
-workflows on the targets.
-Physical hardware and the full editor workflow also remain unverified.
+### Four-guest palette comparison — 2026-11-19
+
+**Issue #16 calibrated-output pass, reverified 2026-11-20 UTC:** the viewer
+passes display, hide/restore and failed-open recovery on all four guests.
+Windows 98 matches the separately calibrated display conversion exactly;
+XP matches the canonical RGB24 references exactly. This is viewer guest
+qualification, not physical-hardware or full-editor validation.
+
+- **Original failure:** executable
+  `d2fbc0c3a1ab8213fb238fcf0b5669bce8334973dc008a88b96cff95de2c4d85`
+  displayed only 4 background colors (reference: 17) and 2 portrait colors
+  (reference: 16) on both 98 editions. XP was exact. The old 32-bit
+  `StretchDIBits` path supplied no image palette. Realizing a palette alone
+  still let the RGB conversion merge nearby colors.
+- **Correction:** carried forward `asset/viewer.c` unchanged from commit
+  `869ab33ef764ccc10a0815cd58405fd47caaf5fe`. Both fixed asset choices share
+  an 8-bit, DWORD-row-padded DIB with logical palette indices
+  (`DIB_PAL_COLORS`). The viewer creates non-collapsing entries from the
+  decoded colors, selects/realizes the palette while painting, and handles
+  `WM_QUERYNEWPALETTE`/`WM_PALETTECHANGED`. Replaced palettes are released;
+  failed reads, decodes or display allocation leave the previous bitmap and
+  palette intact. Decoder and path rules are unchanged.
+- **One executable on all guests:** the fresh #16 build reproduced the
+  current viewer-build hash above and was byte-identical to the preserved
+  read-only transfer kit's `VCASSET.EXE`. Both pinned inputs and all kit
+  manifest hashes were rechecked; the four guest `FC /B` captures show no
+  difference between installed EXEs and the kit. Existing guest evidence
+  was therefore reused, not rerun. Each guest used a fresh overlay of its
+  previously qualified baseline. QEMU 11.1.0 (`v11.1.0-12130-ge470268ff4`),
+  TCG, no NIC or sound card, no installation CD; assets were copied to
+  local `C:\M2VIEW`.
+- **Display configurations:** 98 FE 4.10.1998 and SE 4.10.2222: Pentium,
+  64 MiB, Cirrus 640×480×256, reported `BITSPIXEL=8`, `COLORRES=18`.
+  XP RTM 2600.xpclient.010817-1148 and SP3 2600.xpsp.080413-2111:
+  Pentium III, 256 MiB, standard VGA 640×480×32, reported
+  `BITSPIXEL=32`, `COLORRES=24`. A preliminary unrestricted-TCG FE boot
+  hit an NDIS Windows protection error before the viewer ran. Final 98
+  overlays used `-icount shift=3,align=off,sleep=on`; graphics configuration
+  was unchanged.
+
+Each foreground crop is 320×256, top-down RGB24, 81,920 pixels. Fresh
+independent FFmpeg decodes reproduced both canonical fixture hashes above.
+Both initial foreground frames and both Show Desktop hide/restore frames
+were compared in full, not just sampled or color-counted; hidden crops
+differed. The restored frames and failed-open retention frames also match
+every pixel. No pixel tolerance, artwork adjustment or display-mode change
+was used.
+
+| Guest | Background: canonical / display-converted matching pixels; displayed colors | Portrait: canonical / display-converted matching pixels; displayed colors | After hide/restore |
+| --- | --- | --- | --- |
+| 98 FE | 848 / 81,920; 16 (17 canonical) | 0 / 81,920; 16 (16 canonical) | Both byte-identical to initial calibrated frames |
+| 98 SE | 848 / 81,920; 16 (17 canonical) | 0 / 81,920; 16 (16 canonical) | Both byte-identical to initial calibrated frames |
+| XP RTM | 81,920 / 81,920; 17 | 81,920 / 81,920; 16 | Both exact canonical hashes |
+| XP SP3 | 81,920 / 81,920; 17 | 81,920 / 81,920; 16 | Both exact canonical hashes |
+
+**Independent channel calibration:** a separate synthetic Win32 brush probe,
+not the viewer or artwork, painted all 256 grayscale input values in four
+64-entry palette pages. Uniform-tile assertions rechecked every R, G and B
+channel on both 98 guests against
+`T(c) = 4 * (c >> 2) + 3 * ((c >> 2) & 1)`; both XP guests were identity
+for all 256 values. Applying the measured per-channel lookup to each
+canonical fixture accounts for every 98 pixel difference, with zero residual
+mismatches. The 98 framebuffer hashes, identical on FE and SE, are:
+
+- Background: `fea8d0674c7ccd1234123cf4eea7ce2882f33aeaa5eb60b1a3571b9009f91338`.
+- Portrait: `9cec74bf88ae16ed810504c2f51e0b9b7dd6582b46121c5b768d2d64525b2550`.
+
+Canonical background colors `(41,41,43)` and `(43,43,43)` both convert to
+`(40,40,40)`, leaving 16 distinct displayed RGB colors. This is the one
+calibration-explained collision; there is no unexplained color loss.
+Issue #15 required 17 distinct displayed background colors, so its original
+`RESULTS.txt` and checker correctly remain a failure of that obsolete gate.
+The approved #16 criterion counts the two calibrated grays as one displayed
+color. The new qualification does not rewrite the old result.
+
+**Recovery on each of FE, SE, RTM and SP3:** requesting the initially absent
+`blueface.16` showed “Missing asset. Check the selected asset root.”
+After dismissal, the complete background crop was unchanged. Copying the
+original picture into place allowed File → Picture in the same window.
+Replacing only the overlay's background with its first 100 bytes produced
+“blankeditor.iff: Incorrect FORM length.” The complete portrait crop survived
+dismissal unchanged; restoring the original background and selecting
+File → Background in the same window reproduced the initial background hash.
+All eight filename-specific error dialogs and four binary-comparison captures
+were reviewed again for #16.
+
+**Local verification for #16:** `python tools/asset.py build`, `test` and
+`smoke` all passed; the decoder checked both canonical hashes and 16
+generated cases. The Windows 11 smoke retained its full-pixel, repaint,
+recovery and path-rejection checks. `git diff --check` passed. The full
+README was reviewed and its viewer status updated; probe, archive, build,
+path-security and release instructions remain applicable. Historical
+`qemu-img check` results passed for all four shut-down overlays, with
+unchanged backing-disk hashes in `bases-before.json`/`bases-after.json`;
+those disks were not booted again for this re-verification.
+
+**Private evidence (not tracked):**
+
+- `F:\AmigaVid\inputs\issue-15-869ab33\m2-pal03\`: original `RESULTS.txt`,
+  manifest, kit, per-guest commands/captures/`pixels.json`, combined
+  `comparisons.json`, overlays and backing-hash records. The parent preserves
+  the calibration source, build/capture scripts and old `verify_pal03.py`.
+- This #16 checkout's ignored `inputs/verify_issue16.py` independently
+  decodes the pinned inputs with FFmpeg, rechecks all calibration tiles and
+  full guest crops against #16, and asserts equality with the original
+  per-guest/combined records. It passed without changing preserved evidence;
+  `inputs/issue16-evidence-hashes.json` fingerprints the preserved scripts,
+  captures and kit (not the disks or old QMP sockets).
+- This checkout's `.asset/` holds the byte-identical rebuilt EXE,
+  `PE-IMPORTS.txt`, `HOST-SMOKE.txt`, native-window BMPs, decoder-test log and
+  `ISSUE16-GUEST-VERIFY-PASS.txt`. Original artwork, captures, executables and
+  guest disks remain local.
 
 ### Before/after inventory
 
 | Element | Before → after |
 | --- | --- |
-| `README.md` | Probe, archive and release instructions still apply. The formerly pending real-asset development step now has viewer instructions and host evidence. |
-| `PROGRESS.md` | Archive baseline and four probe passes still apply, with the same limits. The viewer has its own results and pending target checks. |
+| `README.md` | Probe, archive and release instructions still apply. The formerly pending real-asset development step now has viewer instructions and host/guest evidence, distinguishing calibrated 98 output from canonical XP output. |
+| `PROGRESS.md` | Archive baseline and four probe passes still apply, with the same limits. Formerly pending viewer target runs now pass #16's calibrated-output gate; the original #15 gate failure is retained explicitly. |
 | `.gitignore` | Existing local roots still ignored; `.asset/` is now ignored too. |
 | `asset/ilbm.h`, `asset/ilbm.c` | No portable decoder → bounded indexed ILBM to top-down RGB24 with a matching release function. |
-| `asset/viewer.c` | No real-asset window → Win32 viewer with two fixed menu choices. NT directory checks followed by absolute opens → an initial volume-root open followed only by one-name opens through checked parent handles, or refusal. The NT link checks, 9x FAT/FAT32 path, bounded read, decode and display/recovery flow remain. The shared path and parser rules cover **both** fixed leaf names. |
+| `asset/viewer.c` | No real-asset window → Win32 viewer with two fixed menu choices. NT directory checks followed by absolute opens → an initial volume-root open followed only by one-name opens through checked parent handles, or refusal. True-color DIB with default palette → indexed DIB with image-palette realization and activation/change handling. The NT link checks, 9x FAT/FAT32 path, bounded read, decode and failed-open preservation remain. The shared path, parser and presentation rules cover **both** fixed leaf names. |
 | `asset/decode_test.c` | No host decoder driver → native CLI exercising the GUI's decoder. |
 | `tools/asset.py` | No viewer workflow → local fixture preparation, build, tests and smoke commands. Reuses the probe's pin/extraction and PE checks without changing them. |
 | `tools/asset_smoke.py` | No viewer smoke harness → actual window tests with local-only captures and a log. All prior cases remain; a regular file in a directory position is now checked too. |
@@ -209,8 +315,8 @@ Physical hardware and the full editor workflow also remain unverified.
 ## Next milestone
 
 Before this viewer, milestone 2 real-asset ILBM decoding and display was
-the next independent development step. It now has host evidence; run the
-viewer checks above on Windows 98 and XP. Milestone 3 is to edit, save,
+the next independent development step. It now has host and four-guest
+evidence under #16's calibrated-output criterion. Milestone 3 is to edit, save,
 reopen and replay one sequence. Obtain physical Windows 98 and XP
 [probe target-checklist](probe/TEST.TXT) results before claiming native
 hardware validation. Editor-release workflows remain unverified.

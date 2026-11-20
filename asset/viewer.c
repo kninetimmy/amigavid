@@ -46,8 +46,12 @@ typedef DWORD (WINAPI *query_dos_device)(LPCWSTR, LPWSTR, DWORD);
 static const char *const names[] = { "blankeditor.iff", "blueface.16" };
 static char root[MAX_PATH];  /* Absolute drive path, with a trailing backslash. */
 static int win9x;
-static BITMAPINFO dib;
+static struct {
+    BITMAPINFOHEADER header;
+    WORD colors[256];
+} dib;
 static unsigned char *pixels;
+static HPALETTE palette;
 
 static void error_box(HWND window, const char *name, const char *reason)
 {
@@ -271,11 +275,49 @@ done:
     return problem;
 }
 
+static HPALETTE image_palette(const struct ilbm_image *image, unsigned char *indices,
+                              unsigned stride, unsigned *colors)
+{
+    struct {
+        WORD version, count;
+        PALETTEENTRY entries[256];
+    } logical;
+    size_t i, count = (size_t)image->width * image->height;
+    unsigned j;
+    const unsigned char *rgb;
+
+    logical.version = 0x300;
+    logical.count = 0;
+    /* The indexed decoder guarantees at most 256 distinct RGB colors. */
+    for (i = 0; i < count; ++i) {
+        rgb = image->rgb + 3 * i;
+        for (j = 0; j < logical.count; ++j)
+            if (logical.entries[j].peRed == rgb[0] &&
+                logical.entries[j].peGreen == rgb[1] &&
+                logical.entries[j].peBlue == rgb[2])
+                break;
+        if (j == logical.count) {
+            if (j == 256)
+                return NULL;
+            logical.entries[j].peRed = rgb[0];
+            logical.entries[j].peGreen = rgb[1];
+            logical.entries[j].peBlue = rgb[2];
+            /* Do not merge nearby colors with existing system-palette entries. */
+            logical.entries[j].peFlags = PC_NOCOLLAPSE;
+            ++logical.count;
+        }
+        indices[(i / image->width) * stride + i % image->width] = (unsigned char)j;
+    }
+    *colors = logical.count;
+    return CreatePalette((const LOGPALETTE *)&logical);
+}
+
 static void open_picture(HWND window, unsigned which)
 {
     struct ilbm_image image;
-    size_t i, count;
-    unsigned char *bgrx;
+    unsigned i, stride, colors;
+    unsigned char *indices;
+    HPALETTE next_palette;
     char caption[64];
     const char *name = names[which], *problem = read_asset(name, &image);
 
@@ -283,28 +325,35 @@ static void open_picture(HWND window, unsigned which)
         error_box(window, name, problem);
         return;
     }
-    count = (size_t)image.width * image.height;
-    bgrx = malloc(count * 4);
-    if (!bgrx) {
+    stride = (image.width + 3) & ~3U;
+    indices = calloc(stride, image.height);
+    if (!indices) {
         ilbm_free(&image);
         error_box(window, name, "Not enough memory for the display bitmap.");
         return;
     }
-    for (i = 0; i < count; ++i) {
-        bgrx[4 * i] = image.rgb[3 * i + 2];
-        bgrx[4 * i + 1] = image.rgb[3 * i + 1];
-        bgrx[4 * i + 2] = image.rgb[3 * i];
-        bgrx[4 * i + 3] = 0;
+    next_palette = image_palette(&image, indices, stride, &colors);
+    if (!next_palette) {
+        free(indices);
+        ilbm_free(&image);
+        error_box(window, name, "Cannot create the image display palette.");
+        return;
     }
     ilbm_free(&image);
     free(pixels);
-    pixels = bgrx;
-    dib.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    dib.bmiHeader.biWidth = image.width;
-    dib.bmiHeader.biHeight = -(LONG)image.height;
-    dib.bmiHeader.biPlanes = 1;
-    dib.bmiHeader.biBitCount = 32;
-    dib.bmiHeader.biCompression = BI_RGB;
+    pixels = indices;
+    if (palette)
+        DeleteObject(palette);
+    palette = next_palette;
+    dib.header.biSize = sizeof(BITMAPINFOHEADER);
+    dib.header.biWidth = image.width;
+    dib.header.biHeight = -(LONG)image.height;
+    dib.header.biPlanes = 1;
+    dib.header.biBitCount = 8;
+    dib.header.biCompression = BI_RGB;
+    dib.header.biClrUsed = colors;
+    for (i = 0; i < colors; ++i)
+        dib.colors[i] = (WORD)i;
     wsprintfA(caption, TITLE " - %s", name);
     SetWindowTextA(window, caption);
     InvalidateRect(window, NULL, TRUE);
@@ -314,19 +363,36 @@ static LRESULT CALLBACK window_proc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
 {
     PAINTSTRUCT paint;
     HDC dc;
+    HPALETTE old_palette;
+    UINT changed;
     int width, height;
 
     switch (msg) {
     case WM_PAINT:
         dc = BeginPaint(window, &paint);
         if (pixels) {
-            width = dib.bmiHeader.biWidth;
-            height = -dib.bmiHeader.biHeight;
+            old_palette = SelectPalette(dc, palette, FALSE);
+            RealizePalette(dc);
+            width = dib.header.biWidth;
+            height = -dib.header.biHeight;
             StretchDIBits(dc, 0, 0, width, height, 0, 0, width, height, pixels,
-                          &dib, DIB_RGB_COLORS, SRCCOPY);
+                          (const BITMAPINFO *)&dib, DIB_PAL_COLORS, SRCCOPY);
+            SelectPalette(dc, old_palette, TRUE);
         }
         EndPaint(window, &paint);
         return 0;
+    case WM_QUERYNEWPALETTE:
+    case WM_PALETTECHANGED:
+        if (!palette || (msg == WM_PALETTECHANGED && (HWND)wp == window))
+            return 0;
+        dc = GetDC(window);
+        old_palette = SelectPalette(dc, palette, msg == WM_PALETTECHANGED);
+        changed = RealizePalette(dc);
+        SelectPalette(dc, old_palette, TRUE);
+        ReleaseDC(window, dc);
+        if (changed)
+            InvalidateRect(window, NULL, FALSE);
+        return changed != 0;
     case WM_COMMAND:
         switch (LOWORD(wp)) {
         case OPEN_BACKGROUND: open_picture(window, 0); return 0;
@@ -335,6 +401,8 @@ static LRESULT CALLBACK window_proc(HWND window, UINT msg, WPARAM wp, LPARAM lp)
         break;
     case WM_DESTROY:
         free(pixels);
+        if (palette)
+            DeleteObject(palette);
         PostQuitMessage(0);
         return 0;
     }

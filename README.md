@@ -9,10 +9,12 @@ requirements and acceptance evidence.
 
 ## Have a Video Creator disk or backup?
 
-We're still looking for seven original files: `DT_STUFF.S`,
-`vc:vectors/TEST`, `SineTable.bin`, `vc:vectors/Macros.i`, `dancer2.vec`,
-`dancer5.vec` and `dancer7.vec`. The European retail disc has supplied
-projects, fonts and most vector filenames; see the
+We're still looking for five original files: `DT_STUFF.S`,
+`vc:vectors/Macros.i`, `dancer2.vec`, `dancer5.vec` and `dancer7.vec`.
+Standalone originals of `vc:vectors/TEST` and `SineTable.bin` are also
+welcome for provenance; their compiled payloads have been recovered.
+The European retail disc has supplied projects, fonts and most vector
+filenames; see the
 [current recovered and missing inventory](PROGRESS.md#recovered-and-missing-files).
 
 Found a file or a lead? [Open an issue](https://github.com/kninetimmy/amigavid/issues/new).

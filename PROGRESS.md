@@ -916,6 +916,91 @@ editor. The GUI, model, original format, decoder, probe and viewer are
 unchanged. The full README was reviewed: the save guidance now describes
 the refusal; probe, archive, viewer and release instructions still apply.
 
+## Milestone 4 batch 1 — vertical slides (issue #28)
+
+### Source and fidelity
+
+- Rechecked the pinned primary `inputs/vc.zip` hash before source inspection;
+  no original source or artwork is added to the repository.
+  `vc/veffects.h:18–21` identifies Slide On Up/Down and Slide Off Up/Down
+  as IDs 2–5. `neweffects.c::InitVEffectClasses`/`SetVEffectClass`
+  register all four as `OC_SCREEN`, start/stop, new-screen effects with
+  `a=25` and other defaults zero. The shared duration slider bounds are
+  1–255. The active VC10 fields and zero screen-class object reference
+  retain the milestone 3 grammar.
+- `neweffects.c::CalculateParam` gives `ceil(256/(2*a-1))` rows per field;
+  `CalculateLength` separately reserves
+  `floor(ceil(256/ceil(256/(2*a)))/2)+1` ticks. `mainloop.c::MainLoop`
+  activates at `Time*2`; `fx.c::DoDisplay` steps before Func/End.
+  Preview samples after both logical fields of each 40 ms tick.
+- `fx.c::SlideOnDownInit/Func/End`, `SlideOffUpInit/Func/End` and
+  `SlideOffDownInit/Func/End` supply the screen swap, split and source-row
+  offsets. `videocreator.asm::CopLoopNoSquash` switches at `Start2`;
+  `buildscreen` applies each region's `SkipLines`. For a moving frame:
+
+  | Effect | Split row | Top picture / first source row | Bottom picture / first source row |
+  | --- | --- | --- | --- |
+  | Slide On Down (3) | `Value` | incoming / `256-Value` | outgoing / `Value` |
+  | Slide Off Up (4) | `Value` | outgoing / `256-Value` | incoming / `Value` |
+  | Slide Off Down (5) | `Value` | incoming / 0 | outgoing / 0 |
+
+  Down values increase from 0; Off Up decreases from 255. At `a=25`,
+  sampled movement distances are 12, 132 and 252 rows at relative ticks
+  0, 10 and 20; tick 21 is settled. At `a=1`, speed 256 reaches End
+  before Func: On Down and Off Up select the target, but **Off Down keeps
+  the outgoing picture**, since its End only removes screen 2 and its
+  first Func never swaps the base. This source quirk is deliberately
+  preserved, including later seeks.
+- Expectations are source-derived, not original-Amiga captures. The
+  independently generated two-plane row cards distinguish all 256 rows
+  and use disjoint picture colors. They test logical picture composition,
+  not chipset scanout, copper buffering, the depth-dependent blank-line/
+  palette tricks in `buildscreen`, physical field timing or timer jitter.
+  Paired screens still preview only their first member. No new Windows
+  98/XP guest or physical-hardware qualification is claimed; milestone 3
+  guest evidence predates this executable.
+
+### Host verification
+
+- Final local commands, each **passed (exit 0)**, not run by CI:
+  `python tools/editor.py build`, `python tools/editor.py test` and
+  `python tools/editor.py smoke`. Command logs are
+  `.editor/ISSUE28-build-final.txt`, `ISSUE28-test-final.txt` and
+  `ISSUE28-smoke-final.txt`; native results and build provenance are
+  `.editor/HOST-SMOKE.txt` and `.editor/PE-IMPORTS.txt`.
+- Host: Windows 11 Pro x64 `26300.9974`, NTFS, Python 3.14.4 and
+  GCC 16.1.0. The build uses the unchanged verified Open Watcom
+  `2026-11-01-Build` pin: x86 PE32 GUI 4.0, static WinMain,
+  GDI32/KERNEL32/USER32 only and no delay imports. `VCEDIT.EXE` SHA-256:
+  `fe8c9496ff9fc3a584964b859608a639bd462615da43ff4add726ac9ad3dacdd`.
+- Model checks cover exact LF/CRLF round-trips for all four slides at
+  durations 1, 2, 19, 25 and 255, including nondefault `a`–`e`, shifted
+  text and metadata. Independent field samples verify split and both
+  source offsets. The 27 existing rejection cases remain; unsupported
+  ID coverage now uses 6 rather than newly supported 3. Added checks
+  reject durations 0/256/65535 and verify failed placements leave the
+  project byte-identical, with legal adjacent placement at both endpoints.
+- Native smoke authors and restarts each of those 20 cases. Independent
+  320×256 painted-frame comparisons cover before, first, intermediate,
+  last moving and settled ticks where applicable, with backward seeks,
+  exact saved bytes, paired-target imports and all other supported cue
+  fields retained. Invalid UI/import durations, unsupported IDs and
+  conflicting imports/drags preserve the open sequence. Existing Cut,
+  original-artwork Slide On Up, timeline gestures, NT containment and
+  save/recovery checks remain in the same smoke.
+- Exact Play samples supplement coalescible `WM_TIMER` notifications
+  using the existing handler and real `GetTickCount` clock; no test-only
+  renderer or runtime option is added. Ordinary, unassisted SetTimer
+  playback is also run to completion for every case. An initial smoke
+  failed because an ordinary timer skipped requested tick 33. A temporary
+  cross-process KillTimer approach also failed and was removed; the
+  supplemented-handler sampling avoids assuming guaranteed timer delivery.
+- The full README was reviewed: probe, archive, viewer, path/save protection
+  and release guidance remains applicable. Current slide controls and the
+  source quirk are documented; the older illustration and guest evidence
+  are explicitly distinguished. Original inputs, builds and captures stay
+  private under ignored local directories.
+
 ## Open blockers
 
 - `DT_STUFF.S`, vector tables/media, demo video media, and font resources are
@@ -934,7 +1019,9 @@ Before milestone 2, real-asset ILBM decoding and display was the next
 independent development step; the viewer now has host and four-guest
 evidence under #16's calibrated-output criterion. Before milestone 3,
 the next step was to edit, save, reopen and replay one sequence. The
-two-picture workflow is now implemented; the next planned phase covers
-the remaining effects and special screens. Obtain physical Windows 98 and XP
+two-picture workflow is now implemented, followed by the vertical slide
+family above. The next candidate batch is Scroll Up/Down (6/7) and
+Reveal Up/Down (8/9), subject to separate approval; the rest of milestone 4
+and special screens remain outstanding. Obtain physical Windows 98 and XP
 [probe target-checklist](probe/TEST.TXT) results before claiming native
 hardware validation. Editor-release workflows remain unverified.

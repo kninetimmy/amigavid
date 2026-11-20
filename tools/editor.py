@@ -1,4 +1,4 @@
-"""Build and exercise the native M3 editor (no original files shipped)."""
+"""Build and exercise the native editor (no original files shipped)."""
 
 import argparse
 import csv
@@ -82,6 +82,17 @@ FIXTURE = HDR + (
 TILDE_FIXTURE = (FIXTURE.replace(b"WDQjdt;Xbsn!Bsu/jgg", b"WDQjdt;XBSN\x7f2/JGG")
                  .replace(b"Tubs!Mjhiu", b"Tubs!Mjhiu\x7f"))
 
+# Source-derived field samples, not output from vc_at. Each moving sample is
+# (tick since start, total rows stepped); None means End has already run.
+# CalculateParam + DoDisplay: steps 256, 86, 7, 6 and 1 respectively.
+SLIDE_SAMPLES = {
+    1: ((-1, 0), (0, None), (1, None)),
+    2: ((-1, 0), (0, 172), (1, None), (2, None)),
+    19: ((-1, 0), (0, 14), (8, 126), (17, 252), (18, None)),
+    25: ((-1, 0), (0, 12), (10, 132), (20, 252), (21, None)),
+    255: ((-1, 0), (0, 2), (63, 128), (126, 254), (127, None)),
+}
+
 
 def test():
     compiler = shutil.which(os.environ.get("CC", "gcc"))
@@ -107,8 +118,10 @@ def test():
                       (tuple(map(int, ln.split())) for ln in result.stdout.splitlines())}
             # a=19 -> 7 rows per field, 14 per tick, starting at 255.
             require({k: frames[k] for k in (0, 49, 50, 58, 67, 68, 69, 80)} == {
-                0: (6, 0, 256), 49: (6, 0, 256), 50: (6, 7, 241), 58: (6, 7, 129),
-                67: (6, 7, 3), 68: (7, 0, 256), 69: (7, 0, 256), 80: (8, 0, 256),
+                0: (6, 0, 256, 0, 0), 49: (6, 0, 256, 0, 0),
+                50: (6, 7, 241, 0, 0), 58: (6, 7, 129, 0, 0),
+                67: (6, 7, 3, 0, 0), 68: (7, 0, 256, 0, 0),
+                69: (7, 0, 256, 0, 0), 80: (8, 0, 256, 0, 0),
             }, "source-derived cut/slide frame geometry")
         print("PASS active LF/CRLF fixture: two ordinary screens and one pair, byte-exact LF output, frame geometry")
         for data in (TILDE_FIXTURE, TILDE_FIXTURE.replace(b"\n", b"\r\n")):
@@ -116,6 +129,39 @@ def test():
             require(result.returncode == 0 and output.read_bytes() == TILDE_FIXTURE,
                     f"shifted '~' in WARM~1.IFF (ordinary and paired) and Star Light~: {result.stdout}")
         print("PASS active LF/CRLF fixture: shifted '~' in short-style picture name and effect text")
+        for effect in range(2, 6):
+            for duration, samples in SLIDE_SAMPLES.items():
+                data = (TILDE_FIXTURE.replace(b"50\n2\n7\n19\n",
+                                             f"50\n{effect}\n7\n{duration}\n".encode("ascii"))
+                        .replace(b"80\n1\n8\n", b"400\n1\n8\n"))
+                for encoded in (data, data.replace(b"\n", b"\r\n")):
+                    result = parse(encoded)
+                    require(result.returncode == 0 and output.read_bytes() == data,
+                            f"slide {effect}, a={duration}: fields did not round-trip")
+                    frames = {r[0]: r[1:] for r in
+                              (tuple(map(int, ln.split())) for ln in result.stdout.splitlines())}
+                    for elapsed, moved in samples:
+                        if elapsed < 0 or (effect == 5 and duration == 1):
+                            expected = (6, 0, 256, 0, 0)
+                        elif moved is None:
+                            expected = (7, 0, 256, 0, 0)
+                        else:
+                            expected = {
+                                2: (6, 7, 255 - moved, 0, 0),
+                                3: (7, 6, moved, 256 - moved, moved),
+                                4: (6, 7, 255 - moved, moved + 1, 255 - moved),
+                                5: (7, 6, moved, 0, 0),
+                            }[effect]
+                        require(frames[50 + elapsed] == expected,
+                                f"slide {effect}, a={duration}, tick {50 + elapsed}: "
+                                f"{frames[50 + elapsed]} != {expected}")
+                for invalid in (0, 256, 65535):
+                    bad = data.replace(f"50\n{effect}\n7\n{duration}\n".encode("ascii"),
+                                       f"50\n{effect}\n7\n{invalid}\n".encode("ascii"))
+                    require(parse(bad).returncode == 1,
+                            f"slide {effect} accepted invalid duration {invalid}")
+        print("PASS all four slides: exact LF/CRLF fields and source row offsets at durations "
+              "1/2/19/25/255; 12 invalid durations; atomic placement rejection and legal boundaries")
         rejects = [
             ("UTF-8 header", FIXTURE.replace(b"\xa9", b"\xc2\xa9")),
             ("old-style fields", HDR + b"7\nVCPics:fake.16\n0\n"),
@@ -125,7 +171,7 @@ def test():
             ("oversized author", FIXTURE.replace(b"Fixture Author", b"A" * 150)),
             ("overflow", FIXTURE.replace(b"\n50\n", b"\n99999999999\n")),
             ("too many screens", FIXTURE.replace(b"\n7\n3\n", b"\n7\n95\n", 1)),
-            ("unsupported effect", FIXTURE.replace(b"50\n2\n7\n", b"50\n3\n7\n")),
+            ("unsupported effect", FIXTURE.replace(b"50\n2\n7\n", b"50\n6\n7\n")),
             ("special screen", FIXTURE.replace(b"50\n2\n7\n", b"50\n2\n1\n")),
             ("dangling screen ID", FIXTURE.replace(b"50\n2\n7\n", b"50\n2\n9\n")),
             ("unresolved pair", FIXTURE.replace(b"Tvc0dppm/27\n0\n", b"yz{\n0\n")),

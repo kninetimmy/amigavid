@@ -85,8 +85,8 @@ int vc_place(struct vc_project *project, unsigned index, const struct vc_cue *cu
     unsigned long end;
 
     if (index > n || (index == n && n == VC_CUES) || cue->tick > VC_TICK_MAX ||
-        (cue->effect != VC_CUT && cue->effect != VC_SLIDE) ||
-        (cue->effect == VC_SLIDE && (!cue->a || cue->a > 255)))
+        (cue->effect < VC_CUT || cue->effect > VC_SLIDE_OFF_DOWN) ||
+        (cue->effect != VC_CUT && (!cue->a || cue->a > 255)))
         return 0;
     end = cue->tick + vc_length(cue);
     if (end > VC_TICK_MAX + 1)
@@ -230,14 +230,14 @@ const char *vc_read(struct vc_project *project, const char *data, size_t size)
         return "Invalid or empty cue list.";
     for (i = 0; i < count; ++i) {
         if (!number(&reader, VC_TICK_MAX, &cue.tick) ||
-            !word(&reader, VC_SLIDE, &cue.effect) || !cue.effect ||
+            !word(&reader, VC_SLIDE_OFF_DOWN, &cue.effect) || !cue.effect ||
             !word(&reader, project->screens + VC_FIRST_SCREEN - 1, &cue.screen) ||
             cue.screen < VC_FIRST_SCREEN ||
             !word(&reader, 65535, &cue.a) || !word(&reader, 65535, &cue.b) ||
             !word(&reader, 65535, &cue.c) || !word(&reader, 65535, &cue.d) ||
             !word(&reader, 65535, &cue.e) || !word(&reader, 0, &object) ||
             !line(&reader, cue.text, sizeof(cue.text)) ||
-            (cue.effect == VC_SLIDE && (!cue.a || cue.a > 255)))
+            (cue.effect != VC_CUT && (!cue.a || cue.a > 255)))
             return "Invalid or unsupported effect, screen, parameter, or object.";
         if (!strcmp(cue.text, "NOTEXT"))
             cue.text[0] = 0;
@@ -286,14 +286,18 @@ size_t vc_write(const struct vc_project *project, char data[VC_BYTES])
 
 struct vc_frame vc_at(const struct vc_project *project, unsigned long tick)
 {
-    struct vc_frame frame = { 0, 0, VC_HEIGHT };
+    struct vc_frame frame = { 0, 0, VC_HEIGHT, 0, 0 };
     const struct vc_cue *cue;
     unsigned i, step;
     unsigned long distance;
 
     for (i = 0; i < project->cues && project->cue[i].tick <= tick; ++i) {
         cue = &project->cue[i];
-        if (cue->effect == VC_SLIDE && tick - cue->tick < 128) {
+        /* At a=1 DoDisplay calls End before Func can swap the screens.
+           SlideOffDownEnd only removes screen 2, leaving the old base. */
+        if (cue->effect == VC_SLIDE_OFF_DOWN && cue->a == 1)
+            continue;
+        if (cue->effect != VC_CUT && tick - cue->tick < 128) {
             step = (256 + (2 * cue->a - 1) - 1) / (2 * cue->a - 1);
             /* MainLoop starts at field 2*Time; DoDisplay steps before
                rendering. Sample after both logical fields of this tick. */
@@ -301,6 +305,24 @@ struct vc_frame vc_at(const struct vc_project *project, unsigned long tick)
             if (distance < 255) {
                 frame.split = 255 - (unsigned)distance;
                 frame.bottom = cue->screen;
+                switch (cue->effect) {
+                case VC_SLIDE_ON_DOWN:
+                    frame.bottom = frame.top;
+                    frame.top = cue->screen;
+                    frame.split = (unsigned)distance;
+                    frame.top_row = 256 - frame.split;
+                    frame.bottom_row = frame.split;
+                    break;
+                case VC_SLIDE_OFF_UP:
+                    frame.top_row = 256 - frame.split;
+                    frame.bottom_row = frame.split;
+                    break;
+                case VC_SLIDE_OFF_DOWN:
+                    frame.bottom = frame.top;
+                    frame.top = cue->screen;
+                    frame.split = (unsigned)distance;
+                    break;
+                }
                 return frame;
             }
         }

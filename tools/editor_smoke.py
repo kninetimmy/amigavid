@@ -12,15 +12,48 @@ import time
 
 from _winapi import CreateJunction
 from asset import FIXTURE_PINS, NAMES
-from editor import FIXTURE, HDR, require
+from editor import FIXTURE, HDR, SLIDE_SAMPLES, require
 
 
-def authored(first, second, tick, duration):
+def authored(first, second, tick, duration, effect=2):
     names = [bytes(c + 1 for c in ("VCPics:" + path).encode("ascii"))
              for path in (first, second)]
     return (HDR + b"AUTHOR\n1\n2\n" + b"\nZIP\n".join(names) + b"\nZIP\n"
             b"0\n0\n0\n2\n0\n1\n6\n0\n0\n0\n0\n0\n0\nNOTEXT\n" +
-            f"{tick}\n2\n7\n{duration}\n0\n0\n0\n0\n0\nNOTEXT\n".encode("ascii"))
+            f"{tick}\n{effect}\n7\n{duration}\n0\n0\n0\n0\n0\nNOTEXT\n".encode("ascii"))
+
+
+def row_card(second):
+    # Independent raw two-plane ILBM: every row has a distinct repeated binary
+    # pattern; the two cards use disjoint colors. No original artwork.
+    def chunk(name, data):
+        return name + struct.pack(">I", len(data)) + data + b"\0" * (len(data) % 2)
+
+    colors = (b"\x80\0\0", b"\0\xa0\0", b"\0\0\xc0", b"\xf0\xc0\0")
+    header = struct.pack(">HHhhBBBBHBBhh", 320, 256, 0, 0, 2, 0, 0, 0, 0, 1, 1, 320, 256)
+    body = b"".join(bytes([y]) * 40 + bytes([255 if second else 0]) * 40
+                    for y in range(256))
+    ilbm = chunk(b"FORM", b"ILBM" + chunk(b"BMHD", header) +
+                 chunk(b"CMAP", b"".join(colors)) + chunk(b"BODY", body))
+    rgb = b"".join(colors[2 * second + ((y >> (7 - x % 8)) & 1)]
+                   for y in range(256) for x in range(320))
+    return ilbm, rgb
+
+
+def slide_pixels(effect, duration, elapsed, moved, first, second):
+    # fx.c Func/End and videocreator.asm buildscreen's SkipLines. These slices
+    # are independent of the port's vc_frame representation and painted output.
+    if elapsed < 0 or (effect == 5 and duration == 1):
+        return first
+    if moved is None:
+        return second
+    if effect == 2:
+        return first[:(255 - moved) * 960] + second[:(moved + 1) * 960]
+    if effect == 3:
+        return second[(256 - moved) * 960:] + first[moved * 960:]
+    if effect == 4:
+        return first[(moved + 1) * 960:] + second[(255 - moved) * 960:]
+    return second[:moved * 960] + first[:(256 - moved) * 960]
 
 
 def shared_markers(cues):
@@ -183,6 +216,23 @@ def exercise(exe, digest, work, out):
         return until(proc, lambda: (data := frame(hwnd)) and sha(data) == expected_hash and data,
                      f"expected full preview at tick {tick}")
 
+    def play_capture(proc, hwnd, tick, expected):
+        # SetTimer can coalesce/skip ticks. Supplement it with paced WM_TIMER
+        # through the unchanged Play handler and real GetTickCount clock, not
+        # Seek or a test-only renderer. Normal completion is checked separately.
+        command(hwnd, 105)
+        expires = time.monotonic() + 10
+        while time.monotonic() < expires and proc.poll() is None:
+            checked(send(hwnd, 0x0113, 1, 0, 2, 1000, None))
+            if int(control_text(hwnd, 111)) >= tick:
+                command(hwnd, 106)
+                require(control_text(hwnd, 111) == str(tick),
+                        f"timed Play skipped requested tick {tick}")
+                require(sha(frame(hwnd)) == expected, f"timed Play frame at tick {tick}")
+                return
+            time.sleep(.001)
+        raise ValueError(f"timed Play did not reach tick {tick}")
+
     def click_track(hwnd, x, y=320):
         for msg, wp in ((0x0201, 1), (0x0202, 0)):
             checked(send(hwnd, msg, wp, x | (y << 16), 2, 1000, None))
@@ -217,6 +267,90 @@ def exercise(exe, digest, work, out):
     fixture.write_bytes(FIXTURE)
     (work / "invalid.vid").write_bytes(FIXTURE[:-1])
     (work / "missing.vid").write_bytes(FIXTURE.replace(b"WDQjdt;Xbsn!Bsu/jgg", b"WDQjdt;N/27"))
+    cards = [row_card(second) for second in (False, True)]
+    for name, (data, _) in zip(("ROWSA.IFF", "ROWSB.IFF"), cards):
+        (work / name).write_bytes(data)
+    for effect, button, label in ((2, 104, "Slide On Up"), (3, 112, "Slide On Down"),
+                                 (4, 113, "Slide Off Up"), (5, 114, "Slide Off Down")):
+        for duration, samples in SLIDE_SAMPLES.items():
+            expected_bytes = authored("ROWSA.IFF", "ROWSB.IFF", 25, duration, effect)
+            saved = work / f"slide-{effect}-{duration}.vid"
+            checks_slide = {
+                25 + elapsed: sha(slide_pixels(effect, duration, elapsed, moved,
+                                              cards[0][1], cards[1][1]))
+                for elapsed, moved in samples
+            }
+            with launch() as (proc, hwnd):
+                require(control_text(hwnd, button).replace("&", "") == f"Add {label}" and
+                        control_text(hwnd, 110) == "25", f"{label}: named control/default duration")
+                open_file(hwnd, "ROWSA.IFF", 100)
+                command(hwnd, 103)
+                capture(proc, hwnd, 0, sha(cards[0][1]))
+                open_file(hwnd, "ROWSB.IFF", 100)
+                if duration != 25:
+                    edit(hwnd, 110, duration)
+                command(hwnd, button)
+                for sampled, expected in checks_slide.items():
+                    capture(proc, hwnd, sampled, expected)
+                open_file(hwnd, saved.name, 102)
+                require(saved.read_bytes() == expected_bytes,
+                        f"{label}, a={duration}: authored fields differ")
+                quit_editor(proc, hwnd)
+            with launch() as (proc, hwnd):
+                open_file(hwnd, saved.name, 101)
+                for sampled, expected in reversed(tuple(checks_slide.items())):
+                    capture(proc, hwnd, sampled, expected)
+                for sampled, expected in checks_slide.items():
+                    play_capture(proc, hwnd, sampled, expected)
+                command(hwnd, 105)
+                until(proc, lambda: find_child(hwnd, None, "STATIC", "Playback complete."),
+                      f"{label}, a={duration}: playback completion")
+                require(sha(frame(hwnd)) == next(reversed(checks_slide.values())),
+                        f"{label}, a={duration}: final target")
+                if duration == 25:
+                    for invalid in (0, 256):
+                        edit(hwnd, 110, invalid)
+                        command(hwnd, button, modal=True)
+                        dialog(proc, "Slide duration of 1 to 255")
+                        bad = expected_bytes.replace(
+                            f"25\n{effect}\n7\n25\n".encode("ascii"),
+                            f"25\n{effect}\n7\n{invalid}\n".encode("ascii"))
+                        (work / "bad-slide.vid").write_bytes(bad)
+                        open_file(hwnd, "bad-slide.vid", 101, modal=True)
+                        dialog(proc, "Invalid or unsupported")
+                    for unsupported in (0, 6, 49, 900):
+                        bad = expected_bytes.replace(f"25\n{effect}\n7\n".encode("ascii"),
+                                                     f"25\n{unsupported}\n7\n".encode("ascii"))
+                        (work / "bad-slide.vid").write_bytes(bad)
+                        open_file(hwnd, "bad-slide.vid", 101, modal=True)
+                        dialog(proc, "Invalid or unsupported")
+                    (work / "bad-slide.vid").write_bytes(
+                        expected_bytes.replace(f"25\n{effect}\n7\n".encode("ascii"),
+                                               f"0\n{effect}\n7\n".encode("ascii")))
+                    open_file(hwnd, "bad-slide.vid", 101, modal=True)
+                    dialog(proc, "must not overlap")
+                    drag(hwnd, 25, 0)
+                    capture(proc, hwnd, 35, checks_slide[35])
+                roundtrip = work / f"again-{effect}-{duration}.vid"
+                open_file(hwnd, roundtrip.name, 102)
+                require(roundtrip.read_bytes() == expected_bytes,
+                        f"{label}, a={duration}: reopen/rejection changed fields")
+                quit_editor(proc, hwnd)
+            log.append(f"PASS {label} ID {effect}, a={duration}: native author/save/restart/reopen, "
+                       f"backward Seek and clock-paced Play at ticks {tuple(checks_slide)}, "
+                       "exact 81,920-pixel row-card comparisons, final frame and saved bytes.")
+        metadata = FIXTURE.replace(b"50\n2\n7\n", f"50\n{effect}\n8\n".encode("ascii"))
+        imported = work / f"metadata-{effect}.vid"
+        imported.write_bytes(metadata)
+        with launch() as (proc, hwnd):
+            open_file(hwnd, imported.name, 101)
+            copied = work / f"fields-{effect}.vid"
+            open_file(hwnd, copied.name, 102)
+            require(copied.read_bytes() == metadata, f"{label}: imported supported fields changed")
+            quit_editor(proc, hwnd)
+        log.append(f"PASS {label}: nondefault author/track, paired target and a-e/text byte-exact; "
+                   "invalid UI/import durations, unsupported IDs, conflicting imports/drags "
+                   "preserve the open sequence.")
     with unsafe_links(work, out):
         (work / "link.vid").write_bytes(FIXTURE.replace(b"Tvc0dppm/27", b"Mjol0dppm/27"))
         (work / "extra.iff").write_bytes((work / NAMES[0]).read_bytes())

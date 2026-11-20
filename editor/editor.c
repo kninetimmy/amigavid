@@ -17,7 +17,8 @@
 
 enum {
     ADD_PICTURE = 100, OPEN_PROJECT, SAVE_PROJECT, ADD_CUT, ADD_SLIDE,
-    PLAY, STOP, SEEK, PICTURES, NAME, DURATION, TICK
+    PLAY, STOP, SEEK, PICTURES, NAME, DURATION, TICK,
+    ADD_SLIDE_ON_DOWN, ADD_SLIDE_OFF_UP, ADD_SLIDE_OFF_DOWN
 };
 
 static struct document {
@@ -44,7 +45,14 @@ static HPALETTE palette;
 
 static const char *effect_name(unsigned effect)
 {
-    return effect == VC_CUT ? "Straight Cut" : "Slide On Up";
+    switch (effect) {
+    case VC_CUT: return "Straight Cut";
+    case VC_SLIDE: return "Slide On Up";
+    case VC_SLIDE_ON_DOWN: return "Slide On Down";
+    case VC_SLIDE_OFF_UP: return "Slide Off Up";
+    case VC_SLIDE_OFF_DOWN: return "Slide Off Down";
+    }
+    return "Unsupported";
 }
 
 static void message(const char *text)
@@ -165,10 +173,11 @@ static void refresh(void)
     char label[64];
 
     if (!painted || shown.top != frame.top || shown.bottom != frame.bottom ||
-        shown.split != frame.split) {
+        shown.split != frame.split || shown.top_row != frame.top_row ||
+        shown.bottom_row != frame.bottom_row) {
         for (y = 0; y < VC_HEIGHT; ++y)
             row(rgb + y * VC_WIDTH * 3, y < frame.split ? frame.top : frame.bottom,
-                y < frame.split ? y : y - frame.split);
+                y < frame.split ? y + frame.top_row : y - frame.split + frame.bottom_row);
         if (palette)
             DeleteObject(palette);
         palette = make_palette();
@@ -410,7 +419,7 @@ static void add_cue(unsigned effect)
     }
     cue.screen = (unsigned)choice + VC_FIRST_SCREEN;
     cue.effect = effect;
-    if (effect == VC_SLIDE) {
+    if (effect != VC_CUT) {
         cue.a = GetDlgItemInt(window, DURATION, &ok, FALSE);
         if (!ok || !cue.a || cue.a > 255) {
             error("Enter a Slide duration of 1 to 255 ticks.");
@@ -481,6 +490,9 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case SAVE_PROJECT: stop(); save_project(); return 0;
         case ADD_CUT: stop(); add_cue(VC_CUT); return 0;
         case ADD_SLIDE: stop(); add_cue(VC_SLIDE); return 0;
+        case ADD_SLIDE_ON_DOWN: stop(); add_cue(VC_SLIDE_ON_DOWN); return 0;
+        case ADD_SLIDE_OFF_UP: stop(); add_cue(VC_SLIDE_OFF_UP); return 0;
+        case ADD_SLIDE_OFF_DOWN: stop(); add_cue(VC_SLIDE_OFF_DOWN); return 0;
         case PLAY:
             if (!doc->project.cues)
                 return 0;
@@ -715,16 +727,19 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
                              332, 101, 250, 96, PICTURES)) ||
         !control("BUTTON", "Add Straight &Cut", WS_TABSTOP, 332, 130, 118, 23, ADD_CUT) ||
         !control("BUTTON", "Add Slide On &Up", WS_TABSTOP, 464, 130, 118, 23, ADD_SLIDE) ||
-        !control("STATIC", "Slide duration (ticks)", 0, 332, 161, 150, 18, 0) ||
+        !control("BUTTON", "Add Slide On &Down", WS_TABSTOP, 332, 157, 118, 23, ADD_SLIDE_ON_DOWN) ||
+        !control("BUTTON", "Add Slide O&ff Up", WS_TABSTOP, 464, 157, 118, 23, ADD_SLIDE_OFF_UP) ||
+        !control("BUTTON", "Add Slide Off Do&wn", WS_TABSTOP, 332, 184, 118, 23, ADD_SLIDE_OFF_DOWN) ||
+        !control("STATIC", "Ticks", 0, 464, 187, 42, 18, 0) ||
         !(duration = control("EDIT", "25", WS_BORDER | WS_TABSTOP | ES_NUMBER,
-                             496, 158, 86, 22, DURATION)) ||
-        !control("BUTTON", "&Play", WS_TABSTOP, 332, 191, 65, 23, PLAY) ||
-        !control("BUTTON", "S&top", WS_TABSTOP, 401, 191, 65, 23, STOP) ||
+                             510, 184, 72, 22, DURATION)) ||
+        !control("BUTTON", "&Play", WS_TABSTOP, 332, 211, 65, 23, PLAY) ||
+        !control("BUTTON", "S&top", WS_TABSTOP, 401, 211, 65, 23, STOP) ||
         !(position = control("EDIT", "0", WS_BORDER | WS_TABSTOP | ES_NUMBER,
-                             475, 191, 54, 22, TICK)) ||
-        !control("BUTTON", "&Seek", WS_TABSTOP, 533, 191, 49, 23, SEEK) ||
+                             475, 211, 54, 22, TICK)) ||
+        !control("BUTTON", "&Seek", WS_TABSTOP, 533, 211, 49, 23, SEEK) ||
         !(status = control("STATIC", "Enter a filename from the workspace.", 0,
-                           332, 223, 250, 38, 0))) {
+                           332, 242, 250, 27, 0))) {
         error("Cannot initialize editor controls.");
         goto done;
     }

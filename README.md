@@ -243,6 +243,18 @@ python tools/editor.py test
 python tools/editor.py smoke
 ```
 
+Previously, editor smoke runs wrote retained evidence straight into the
+shared `.editor/` build directory, so new captures could be mixed with old
+ones. Now each run that reaches the native checks prints its own fresh
+`.editor/smoke-*` directory. Every retained RGB capture and copied VID save,
+and the final `HOST-SMOKE.txt`, belong to that run only. A new run does not
+reuse or update old evidence, and there is no shared latest copy. Look for
+exit 0 and `HOST-SMOKE.txt` in the directory printed by that invocation.
+If it fails or stops early, any captures and copies already written stay
+there, but there is no completed report. The disposable editor workspace
+is still separate, and the executable, linker map and PE report stay
+directly in `.editor/`. Keep all smoke evidence local.
+
 For a fast, deterministic check of timed Play retry diagnostics, run separately:
 
 ```powershell

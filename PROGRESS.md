@@ -1568,6 +1568,54 @@ the refusal; probe, archive, viewer and release instructions still apply.
   guest preview, physical hardware, original-reader and editor-release
   qualification remain outstanding; prior guest evidence predates this build.
 
+## Host tooling — per-run editor smoke evidence (issue #46)
+
+- **Before:** editor smoke stored retained RGB captures, copied VID saves
+  and `HOST-SMOKE.txt` directly in `.editor/`, the shared build directory
+  recorded in the historical runs above. **After:** each invocation that
+  starts the native checks announces a fresh `.editor/smoke-*` directory.
+  Every retained RGB and VID name is created exclusively there; prior runs
+  and legacy names are not reused or updated. Partial evidence stays in its
+  own directory. `HOST-SMOKE.txt` is published only after the checks and
+  disposable workspace cleanup, not as a shared latest copy.
+- The native assertion matrix, separate disposable editor workspace,
+  subprocess working directory and temporary junction test target are
+  unchanged. `.editor/VCEDIT.EXE`, `.editor/editor.map` and
+  `.editor/PE-IMPORTS.txt` retain their build locations. Probe and viewer
+  commands and shortcut handling are unchanged.
+- `python -m unittest discover -s tools -p "test_*.py"` **passed (4 tests,
+  exit 0)**. The isolation regression leaves partial RGB and VID evidence
+  on failure, then checks distinct destinations, unchanged earlier bytes
+  and two untouched scratch hardlink targets after the next invocation.
+  The same test failed against the old runner because the interrupted
+  evidence included the legacy success report.
+- `python tools/asset.py prepare` and `python tools/editor.py build` both
+  **passed (exit 0)** using the pinned archive and verified Open Watcom
+  cache on Windows 11 Pro x64 `26300.9974` (NTFS, Python 3.14.4).
+  `VCEDIT.EXE` matches the previous native smoke build byte for byte:
+  `b635eb8f4de09cbec9ba3a473cc92a6c841094a9ec9d31aea35d5eb8134d0684`.
+- **Native host only, 2026-11-20 UTC:** an ignored local driver ran the
+  smoke on an unlocked desktop and stopped it between the first two Peel
+  cases (expected exit 1 after 7m 15s). `.editor/smoke-3ybzr90o/` retained
+  two actual 320×256 RGB24 captures and one byte-checked VID, with no
+  completion report. The second invocation, `python tools/editor.py smoke`,
+  **passed (exit 0, 23m 30s)**. It covered 96 first-transition cases,
+  60 Cut-then-transition cases, 12 adjacent sequences, and the existing
+  duration, marker, replay, containment and save/recovery checks, with no
+  timed Play retries. `.editor/smoke-n74j2k0w/` retained 150 RGBs, 40 VID
+  copies and `HOST-SMOKE.txt` (SHA-256
+  `8560bf2b595564c55316b138cc04e0e19091e8a7dc3cad8665f65fcda0e53bd4`).
+- The local evidence check confirmed both announced paths, exact file
+  inventories, all 150 complete-run capture hashes, and unchanged bytes
+  in the interrupted directory after the passing run. No shared evidence,
+  disposable directory or editor process was left by either run. Preserve
+  the two ignored run directories and `inputs/issue46/` (verification
+  helpers, logs and `evidence-manifest.json`) before worktree cleanup.
+- Reviewed the full README and documented where to find evidence and how
+  to recognize an incomplete run. The required checks ran locally, not in
+  CI. No Windows 98/XP guest, physical hardware, original-reader or editor
+  release qualification was run; the next milestone is unchanged.
+
 ## Open blockers
 
 - The [five missing files](#recovered-and-missing-files) still need locating;

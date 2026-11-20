@@ -344,7 +344,15 @@ def smoke():
         work = Path(folder)
         for name, (_, input_hash, _) in zip(NAMES, FIXTURE_PINS):
             copy_fixture(name, input_hash, work)
-        exercise(exe, digest, work, out)
+        evidence = Path(tempfile.mkdtemp(dir=out, prefix="smoke-"))
+        print(f"Editor smoke evidence: {evidence}", flush=True)
+        report = exercise(exe, digest, work, evidence)
+    print(report, end="", flush=True)
+    # Publish only after the native checks, workspace cleanup and report write.
+    draft = evidence / "HOST-SMOKE.tmp"
+    with draft.open("x", encoding="utf-8") as stream:
+        stream.write(report)
+    draft.rename(evidence / "HOST-SMOKE.txt")  # Windows rename refuses an existing name.
 
 
 def main():

@@ -32,7 +32,7 @@ saves, reopens and replays the sequence.
 
 Milestone 4 adds **Slide On Down**, **Slide Off Up** and **Slide Off Down**
 (VC10 IDs 3–5), followed by **Scroll Up**, **Scroll Down**, **Reveal Up**
-and **Reveal Down** (IDs 6–9).
+and **Reveal Down** (IDs 6–9), then **Peel Up** and **Peel Down** (IDs 10/11).
 These additions have Windows 11 host checks, not guest qualification.
 
 **The first useful workflow has been demonstrated in QEMU:** on Windows
@@ -271,10 +271,10 @@ PASTETST.EXE --disposable-xp-guest VCEDIT.EXE PASTE.LOG
 
 The driver supplies synthetic guest clipboard text and exercises `WM_PASTE`,
 selection replacement, CRLF/LF/CR input, and valid durations including 255
-across all eight timed transitions. `PASTE.LOG` records 160 cases with exact
-saved-byte comparisons and a final failure count. Do not run it on a user's
-desktop or reuse a workspace containing earlier test saves. QEMU is not
-required by ordinary host checks; this focused regression is not full guest
+across the eight pre-Peel timed transitions (IDs 2–9). `PASTE.LOG` records 160
+cases with exact saved-byte comparisons and a final failure count. Do not run
+it on a user's desktop or reuse a workspace containing earlier test saves. QEMU
+is not required by ordinary host checks; this focused regression is not full guest
 qualification.
 
 Launch `.editor\VCEDIT.EXE` with a single absolute, local workspace directory:
@@ -290,8 +290,9 @@ pictures to that folder first. It must be on local FAT on Windows 98.
    Choose **Add Straight Cut**. Open the second picture and choose
    **Add Slide On Up**, **Add Slide On Down**, **Add Slide Off Up** or
    **Add Slide Off Down**, or choose **Add Scroll Up**, **Add Scroll Down**,
-   **Add Reveal Up** or **Add Reveal Down**. The screen list selects the target
-   for the next cue; **Ticks** sets the transition duration parameter
+   **Add Reveal Up**, **Add Reveal Down**, **Add Peel Up** or **Add Peel Down**.
+   The screen list selects the target for the next cue; **Ticks** sets
+   the transition duration parameter
    (1–255, default 25), in 25ths of a second. Paste one duration, with no line
    breaks.
 2. Drag the second cue's marker horizontally to a new start tick. Cues
@@ -335,12 +336,22 @@ the outgoing picture away to reveal the target. Scroll moves both pictures
 in the chosen direction; Reveal moves the boundary over stationary pictures.
 Source integer rounding can settle a transition before its timeline marker
 ends. The original one-tick **Slide Off Down**, **Scroll Down** and **Reveal
-Down** skip their screen swap and leave the outgoing picture (black for a
-first cue); the port preserves that quirk. Seek and Play use the same logical
-two-field-per-tick picture rows, not Amiga copper buffering or display tricks.
+Down**, as well as **Peel Down**, skip their screen swap and leave the outgoing
+picture (black for a first cue); the port preserves that quirk. Seek and Play
+use the same logical two-field-per-tick picture rows, not Amiga copper buffering
+or display tricks.
+
+Peel reflects rows of the outgoing picture (Up) or incoming picture (Down)
+around a moving pivot. The pivot row appears once, then rows run backwards.
+Only while the original `Value` is below 128 does a second, upright picture
+begin at row `2*Value`, using that same source row; at 128 it is still absent.
+Completion clears the reflection before the next cue.
+Windows 11 host checks cover first-cue and Cut-then-Peel author/save/reopen,
+exact row-card pixels at Values 127/128, duration 1, completion and adjacent
+cues through Seek and Play. These are not Windows 98/XP preview qualifications.
 
 The editor preserves active VC10 screen order, paired references, author,
-track number, and all nine supported effects' IDs, timing, parameters and text.
+track number, and all eleven supported effects' IDs, timing, parameters and text.
 It previews the first member of a pair only; Psycho Flicker and CD audio are not
 implemented. Other effect IDs, special screen IDs, object tables and
 malformed files are refused without replacing the open document. To replace a

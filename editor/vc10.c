@@ -85,7 +85,7 @@ int vc_place(struct vc_project *project, unsigned index, const struct vc_cue *cu
     unsigned long end;
 
     if (index > n || (index == n && n == VC_CUES) || cue->tick > VC_TICK_MAX ||
-        (cue->effect < VC_CUT || cue->effect > VC_REVEAL_DOWN) ||
+        (cue->effect < VC_CUT || cue->effect > VC_PEEL_DOWN) ||
         (cue->effect != VC_CUT && (!cue->a || cue->a > 255)))
         return 0;
     end = cue->tick + vc_length(cue);
@@ -230,7 +230,7 @@ const char *vc_read(struct vc_project *project, const char *data, size_t size)
         return "Invalid or empty cue list.";
     for (i = 0; i < count; ++i) {
         if (!number(&reader, VC_TICK_MAX, &cue.tick) ||
-            !word(&reader, VC_REVEAL_DOWN, &cue.effect) || !cue.effect ||
+            !word(&reader, VC_PEEL_DOWN, &cue.effect) || !cue.effect ||
             !word(&reader, project->screens + VC_FIRST_SCREEN - 1, &cue.screen) ||
             cue.screen < VC_FIRST_SCREEN ||
             !word(&reader, 65535, &cue.a) || !word(&reader, 65535, &cue.b) ||
@@ -286,7 +286,7 @@ size_t vc_write(const struct vc_project *project, char data[VC_BYTES])
 
 struct vc_frame vc_at(const struct vc_project *project, unsigned long tick)
 {
-    struct vc_frame frame = { 0, 0, VC_HEIGHT, 0, 0 };
+    struct vc_frame frame = { 0, 0, VC_HEIGHT, 0, 0, VC_HEIGHT };
     const struct vc_cue *cue;
     unsigned i, step;
     unsigned long distance;
@@ -296,7 +296,7 @@ struct vc_frame vc_at(const struct vc_project *project, unsigned long tick)
         /* These downward Ends leave the old base when a=1 reaches End
            before the first Func can swap the screens. */
         if ((cue->effect == VC_SLIDE_OFF_DOWN || cue->effect == VC_SCROLL_DOWN ||
-             cue->effect == VC_REVEAL_DOWN) && cue->a == 1)
+             cue->effect == VC_REVEAL_DOWN || cue->effect == VC_PEEL_DOWN) && cue->a == 1)
             continue;
         if (cue->effect != VC_CUT && tick - cue->tick < 128) {
             step = (256 + (2 * cue->a - 1) - 1) / (2 * cue->a - 1);
@@ -340,6 +340,20 @@ struct vc_frame vc_at(const struct vc_project *project, unsigned long tick)
                     frame.bottom = frame.top;
                     frame.top = cue->screen;
                     frame.split = (unsigned)distance;
+                    frame.bottom_row = frame.split;
+                    break;
+                case VC_PEEL_UP:
+                case VC_PEEL_DOWN:
+                    if (cue->effect == VC_PEEL_DOWN) {
+                        frame.bottom = frame.top;
+                        frame.top = cue->screen;
+                        frame.split = (unsigned)distance;
+                    }
+                    /* Peel Func sets Reflect1=Value and enables screen 2 only
+                       below 128. CopLoop2 changes the modulo before this row's
+                       fetch: Value is shown once, then rows run backwards. */
+                    frame.reflect = frame.split;
+                    frame.split = frame.reflect < 128 ? 2 * frame.reflect : VC_HEIGHT;
                     frame.bottom_row = frame.split;
                     break;
                 }

@@ -21,6 +21,8 @@
 #define VC_SCROLL_DOWN 7
 #define VC_REVEAL_UP 8
 #define VC_REVEAL_DOWN 9
+#define VC_PEEL_UP 10
+#define VC_PEEL_DOWN 11
 
 struct vc_screen {
     char first[VC_NAME], second[VC_NAME];
@@ -42,6 +44,7 @@ struct vc_project {
 struct vc_frame {
     unsigned top, bottom, split;  /* screen IDs (0 is black); split is a row. */
     unsigned top_row, bottom_row; /* source row at the start of each region. */
+    unsigned reflect;             /* top rows reverse after this row; 256 is off. */
 };
 
 const char *vc_picture_path(const char *name);

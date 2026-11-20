@@ -663,6 +663,36 @@ expectations where a drawn body contains the pointer.
   issue #25. This revision was not run on Windows 98/XP guests, physical
   targets or an original Amiga reader; milestone 4 remains next.
 
+### README illustration — issue #25
+
+- `docs/images/editor-slide-on-up.png` is an actual, unretouched capture of
+  the running editor on Windows 11 Pro x64 `26300.9974`, not a guest capture.
+  The screen capture is cropped to the visible window bounds and encoded
+  losslessly as a 594×411 PNG. The executable is the preserved issue #24
+  build, SHA-256
+  `3391163baa22b944936a4a5a9bf1f6de3978085bc43970c76499900aeefadb4e`;
+  its checksum and normalized source hashes matched this checkout.
+- The two 320×256 geometric ILBM test cards were created from scratch for
+  this documentation, without archive imagery or third-party assets, and
+  are dedicated to the public domain under [CC0-1.0](
+  https://creativecommons.org/publicdomain/zero/1.0/). Publication of this
+  demo content is cleared; original archive assets and guest captures stay
+  private.
+- Native controls loaded both cards, added Straight Cut at 0 and Slide On
+  Up with duration 19, dragged Slide from 25 to 50, saved and reopened
+  `demo.vid`, then sought to tick 58. All 81,920 captured preview pixels
+  matched the independently composed cards at split row 129. PNG SHA-256:
+  `7c73822055183ae226496db1ea4de297191019a5eed46ff2c3a3bcff2bc802dc`.
+- The PNG decoded successfully with no metadata. A local README HTML
+  rendering in installed Edge decoded the linked image at 594×411 with
+  nonempty alt text; both the PNG and rendered introduction were visually
+  checked.
+- The full README was reviewed against the shipped commands and recorded
+  evidence. Its introduction now separates the earlier guest-tested
+  workflow from the later host-only timeline fixes; probe, archive, viewer,
+  editor and save-protection instructions remain applicable. Milestone 4
+  remains next. No runtime code or target-OS qualification changed here.
+
 ### Guest verification
 
 **First implementation (before review fixes):**

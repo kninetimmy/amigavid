@@ -7,6 +7,40 @@ required at runtime.
 See [Video-Creator-Win32-PRD.md](Video-Creator-Win32-PRD.md) for detailed
 requirements and acceptance evidence.
 
+## What works today
+
+The starting point was the archived Amiga source, not a Windows app.
+After inventorying it, proving the Windows toolchain and opening real
+artwork, milestone 3 delivered `VCEDIT.EXE`: a small native editor that
+loads two pictures, places a Straight Cut and a timed Slide On Up, and
+saves, reopens and replays the sequence.
+
+**The first useful workflow has been demonstrated in QEMU:** on Windows
+98 SE, add the pictures and effects, drag the transition's start time,
+save a `.vid` project, quit, reopen and replay. Then transfer that exact
+save and its pictures to x86 Windows XP Professional SP3 and replay it
+with the same executable. All 11 sampled frames matched the expected
+output, accounting for the measured 98 display-color conversion.
+See the [milestone 3 evidence](PROGRESS.md#guest-verification).
+
+That guest-tested build predates the later timeline selection and drag
+fixes, which have been checked on Windows 11 only. The screenshot below
+shows the newer editor on that development host, not a 98 or XP run.
+Physical Windows 98/XP hardware, original Amiga-reader compatibility and
+full editor-release qualification remain unverified.
+
+![Native VCEDIT window with two cues at tick 58; a gold circle remains above a teal geometric card sliding up from below.](docs/images/editor-slide-on-up.png)
+
+*Windows 11 x64: the running editor paused with Seek at tick 58, partway
+through Slide On Up. The two geometric test cards were created independently
+for this README and are publication-cleared; no archive artwork is shown.*
+[Capture provenance](PROGRESS.md#readme-illustration--issue-25).
+
+**Next: milestone 4** — add the remaining effects, animated 2D/3D vectors,
+QuadAnims, text and palette effects in small, tested batches. CD audio and
+the remaining editing workflows follow in milestone 5; this is not yet
+the complete Video Creator port.
+
 ## Expected phases
 
 0. **Establish the baseline:** verify the pinned archive and inventory source
@@ -23,15 +57,14 @@ requirements and acceptance evidence.
 6. **Qualify and package:** qualify the same portable ZIP on both Windows
    families.
 
-## Current focus
+## Probe and viewer status
 
 The Open Watcom Win32 probe has a repeatable build and a Windows 11 host
 smoke test. The unchanged kit also passes on all four QEMU guest targets:
 Windows 98 FE (4.10.1998), 98 SE (4.10.2222), x86 XP RTM
 (2600.xpclient.010817-1148), and x86 XP Professional SP3
 (2600.xpsp.080413-2111). Physical-hardware and editor-release validation
-remain open. Before milestone 2, the next independent step was to decode
-and display actual ILBM artwork. The viewer now passes its fixture tests,
+remain open. The ILBM viewer also passes its fixture tests,
 Windows 11 smoke test and four-guest display, hide/restore and failed-open
 recovery checks with the same executable. XP RTM/SP3 match the exact
 canonical RGB24 frames; 98 FE/SE match every pixel after the independently
@@ -39,11 +72,8 @@ measured Cirrus display-channel conversion. That conversion merges two
 background grays into one displayed color (16 displayed colors from 17
 canonical colors), as allowed by issue #16; no tolerance is used. See the
 [probe matrix](PROGRESS.md#runtime-evidence) and
-  [viewer evidence](PROGRESS.md#milestone-2--real-asset-ilbm-viewer).
-
-Milestone 3 adds `VCEDIT.EXE`, a separate editor for a two-picture sequence.
-The probe and viewer remain available and unchanged. Milestone 4 will cover
-the remaining effects and special screens.
+[viewer evidence](PROGRESS.md#milestone-2--real-asset-ilbm-viewer).
+These four-guest results are for the probe and viewer, not the editor.
 
 ## Build and test the Win32 probe
 
@@ -271,23 +301,10 @@ replacement of eligible ordinary files are unchanged.
 The Windows 98 local FAT/FAT32 fallback still uses absolute paths; this is
 not a power-loss guarantee for FAT.
 
-## First useful demo and release acceptance
+## Release acceptance
 
-Before milestone 3, the PRD's first useful demo was a goal: open real
-editor artwork on Windows 98, add two pictures and a timed transition, save
-the project, and play that file on XP with the same executable. Earlier
-corrected builds passed on Windows 98 SE and x86 XP Professional SP3 QEMU
-guests using a 98 save that references a filename with `~`. The
-named-stream fix repeated the same-file demo and verified ordinary NTFS
-replacement on XP. The earlier 98 FAT32 run also checked successful
-replacement, rejection of a true short alias, and preservation of a
-preexisting backup. Visible-marker targeting and shared-marker selection
-(#22) were tested on Windows 11, not in those guests. The
-[milestone 3 evidence](PROGRESS.md#milestone-3--two-picture-editor) separates
-host and guest results. The original Amiga reader and physical hardware are
-not verified.
-
-Release acceptance is stricter: the same portable ZIP must pass the edit,
+The two-picture demo above is an intermediate milestone. For release
+acceptance, the same portable ZIP must pass the edit,
 save, reopen and playback workflow on both Windows families. A modern-host
 smoke test does not qualify either target, and guest probe passes are not
 editor-release or physical-hardware validation.

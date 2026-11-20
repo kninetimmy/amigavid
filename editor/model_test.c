@@ -14,7 +14,7 @@ static void placement_checks(void)
 
     cut.effect = VC_CUT;
     cut.screen = slide.screen = VC_FIRST_SCREEN;
-    for (effect = VC_SLIDE; effect <= VC_REVEAL_DOWN; ++effect) {
+    for (effect = VC_SLIDE; effect <= VC_PEEL_DOWN; ++effect) {
         for (a = 1; a <= 255; a += 254) {
             vc_init(&project);
             assert(vc_place(&project, 0, &cut));
@@ -44,7 +44,7 @@ static void placement_checks(void)
             invalid = slide;
             invalid.effect = 0;
             assert(!vc_place(&project, 1, &invalid));
-            invalid.effect = 10;
+            invalid.effect = 12;
             assert(!vc_place(&project, 1, &invalid));
             invalid.effect = 900;
             assert(!vc_place(&project, 1, &invalid));
@@ -60,6 +60,40 @@ static void placement_checks(void)
     }
 }
 
+static void peel_checks(void)
+{
+    struct vc_cue cue = { 0 };
+    struct vc_frame frame;
+    unsigned effect;
+
+    for (effect = VC_PEEL_UP; effect <= VC_PEEL_DOWN; ++effect) {
+        vc_init(&project);
+        cue.tick = 0;
+        cue.effect = effect;
+        cue.screen = 7;
+        cue.a = 255;             /* One row per field, one startup update. */
+        assert(vc_place(&project, 0, &cue));
+        frame = vc_at(&project, 63);
+        assert(frame.reflect == (effect == VC_PEEL_UP ? 128 : 127));
+        assert(frame.split == (effect == VC_PEEL_UP ? 256 : 254));
+        cue.tick = 1;            /* Two updates per tick; opposite parity. */
+        assert(vc_place(&project, 0, &cue));
+        frame = vc_at(&project, 64);
+        assert(frame.reflect == (effect == VC_PEEL_UP ? 127 : 128));
+        assert(frame.split == (effect == VC_PEEL_UP ? 254 : 256));
+        frame = vc_at(&project, 128);
+        assert(frame.top == 7 && frame.split == 256 && frame.reflect == 256);
+        cue.tick = 130;          /* First legal tick after the reserved length. */
+        cue.effect = VC_SLIDE;
+        cue.screen = 6;
+        cue.a = 19;
+        assert(vc_place(&project, 1, &cue));
+        frame = vc_at(&project, 130);
+        assert(frame.top == 7 && frame.bottom == 6 && frame.split == 241);
+        assert(frame.reflect == 256 && !frame.top_row && !frame.bottom_row);
+    }
+}
+
 int main(int argc, char **argv)
 {
     FILE *file;
@@ -70,6 +104,7 @@ int main(int argc, char **argv)
     unsigned i;
 
     placement_checks();
+    peel_checks();
     if (argc != 3 || !(file = fopen(argv[1], "rb")))
         return 2;
     size = fread(input, 1, sizeof(input), file);

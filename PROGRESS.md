@@ -1467,6 +1467,107 @@ the refusal; probe, archive, viewer and release instructions still apply.
   original Amiga reader or an editor release. No original code or artwork,
   guest disk or capture is published.
 
+## Milestone 4 batch 3 — Peel Up and Peel Down (issue #44)
+
+### Source and fidelity
+
+- Reverified the primary `inputs/vc.zip` against SHA-256
+  `ef4622f337e4e6331fdc97d5da6ec54d35f0d39bcd28ab898ce3689b8fb36ee3`.
+  `vc/veffects.h:26–27` assigns IDs 10/11;
+  `neweffects.c:108–109,1136–1144,1245–1251,1599–1615,1946–1947`
+  supplies the duration control, shared length/field step, dispatch and
+  defaults (25, other parameters zero), with the same screen object class
+  and start/stop placement as the preceding transitions.
+- `fx.c:1950–2046` supplies both Init/Func/End contracts. Up decreases
+  Value from 255 to 0; Down increases it from 0 to 255 and swaps the two
+  pictures on its first Func. Both set reflection to Value, enabling
+  screen 2 only when `Value < 128`, at output/source row `2*Value`.
+  Up reflects the outgoing picture; Down reflects the incoming picture.
+- The active `videocreator.asm::CopLoopNoSquash/CopLoop2:1266–1379`,
+  `COPWAIT:825–842` and `buildscreen:1396–1511` determine the row timing,
+  not the inactive commented reflection code in the squash loop. The wait
+  at horizontal `$01` precedes row fetching. For the 40-byte row cards,
+  modulo -80 reverses the next source-row advance: output rows through
+  Value use the same source row; subsequent reflected rows use
+  `2*Value-y`. The pivot appears once. Screen 2 starts at its skipped row
+  and resets the modulo to zero.
+- Explicit boundary: at Value 128, rows 0–128 are upright and rows
+  129–255 read source 127–1, with no second picture. At Value 127,
+  rows 0–127 are upright, rows 128–253 read source 126–1, and rows
+  254–255 come from the second picture's rows 254–255.
+  With duration 255, tick-zero relative tick 63 has Up=128/Down=127;
+  a positive-start relative tick 63 has Up=127/Down=128.
+- The existing `ceil(256/(2*a-1))` field step, update-before-Func/End,
+  startup field exception, reserved placement length and 1–255 duration
+  range are unchanged. Duration-1 Peel Up selects the target immediately;
+  **duration-1 Peel Down retains the outgoing picture**, including startup
+  black, because End runs before the first Func/swap. Both Ends remove
+  reflection and the second region. Following cues start from the held
+  output, without reflected rows.
+- Two named buttons reuse the selected screen and whole-field duration
+  validation. Play/Stop/Seek move down one row and status uses the space
+  below the preview; client size, preview size and timeline mapping are
+  unchanged. VC10 IDs, target, tick, duration, remaining parameters,
+  shifted text and metadata round-trip without changing the grammar.
+- These are independently implemented, source-derived logical picture-row
+  expectations, not original-Amiga captures. Paired screens still preview
+  only their first picture. Chipset scanout, copper buffering, depth-dependent
+  blank-line/palette tricks, physical field timing and timer jitter are not
+  qualified. No original code or artwork is published.
+
+### Host verification — 2026-11-20
+
+- `python tools/editor.py build` and `python tools/editor.py test` each
+  **passed (exit 0)** locally, not in CI. The deterministic retry check,
+  `python -m unittest discover -s tools -p test_play_capture.py`,
+  **passed (3 tests, exit 0)**.
+  Host: Windows 11 Pro x64 `26300.9974`, NTFS, Python 3.14.4, GCC 16.1.0.
+- Reused and hash-verified the existing local Open Watcom
+  `2026-11-01-Build` cache; no download. Build remains x86 PE32 GUI 4.0,
+  static WinMain, direct GDI32/KERNEL32/USER32 only, no delay imports.
+  `VCEDIT.EXE` SHA-256:
+  `b635eb8f4de09cbec9ba3a473cc92a6c841094a9ec9d31aea35d5eb8134d0684`.
+  The pinned local archive supplied only the two prepared smoke fixtures.
+- Model checks cover IDs 2–11 at durations 1/2/19/25/65/255, exact LF/CRLF
+  round-trips with nondefault metadata, paired target, parameters and shifted
+  text; first cues at ticks 0/1; both reflection boundaries and cleanup;
+  following Cut/Slide output; invalid durations and atomic placement refusal.
+  All 27 existing malformed/unsafe cases and NT save/fault checks pass.
+- `python tools/editor.py smoke` **passed (exit 0)** on the complete rerun,
+  locally, not in CI: **96 first-transition and 60 Cut-then-transition
+  row-card cases**, including 36 Peel cases at the six durations above.
+  Native controls author, save, quit, reopen and compare all 81,920 pixels
+  at each sampled tick, with backward Seek, clock-paced Play and ordinary
+  timer-driven completion. Both sides of 128, exact Values 127/128,
+  duration 1 and completion pass for each direction.
+  **12 adjacent sequences** include each Peel followed immediately by a
+  visibly distinct Slide at durations 1/25, with exact saved fields and
+  Seek/Play output free of prior reflection. All ten transitions retain
+  paired-target/metadata round-trips, 140 native duration refusals and ten
+  valid replacements to 255. Existing Cut, slides, Scroll/Reveal, original
+  artwork, marker gestures, containment and save/recovery checks pass.
+  No timed Play sample needed a retry.
+- The first native smoke command hit its 1,200-second outer timeout
+  (exit 143) during Cut-then-Reveal Down, before reaching the Cut-then-Peel
+  cases. No assertion failure was reported; it is not a completed smoke
+  result. `.editor/ISSUE44-smoke.txt` retains that interrupted log.
+- Private evidence in this worktree's `.editor/`: `ISSUE44-build.txt`,
+  `ISSUE44-test.txt`, `ISSUE44-smoke-complete.txt`, `ISSUE44-unit.txt`,
+  `PE-IMPORTS.txt`, `HOST-SMOKE.txt`, pinned excerpts in `ISSUE44-source.txt`,
+  150 `peel-*.rgb` captures (320×256 top-down RGB24), 36 Peel saves and four
+  adjacent-cue saves. `python .editor/verify_peel.py` **passed (exit 0)**,
+  separately simulating field updates and row-pointer strides without
+  importing the port or smoke oracle, and checking all captures and 40
+  hand-encoded saves; results are `ISSUE44-capture-review.txt`.
+  `ISSUE44-MANIFEST.json` fingerprints the retained evidence.
+  Preserve these ignored files before worktree cleanup; none is published.
+- The full README was reviewed, including probe, archive, viewer, editor,
+  path/save protection and release instructions. It now describes Peel and
+  limits the older optional XP paste driver's 160 cases to IDs 2–9; those
+  guest clipboard cases were not rerun or extended to Peel. Windows 98/XP
+  guest preview, physical hardware, original-reader and editor-release
+  qualification remain outstanding; prior guest evidence predates this build.
+
 ## Open blockers
 
 - The [five missing files](#recovered-and-missing-files) still need locating;
@@ -1490,8 +1591,8 @@ independent development step; the viewer now has host and four-guest
 evidence under #16's calibrated-output criterion. Before milestone 3,
 the next step was to edit, save, reopen and replay one sequence. The
 two-picture workflow is now implemented, followed by the vertical slide,
-Scroll Up/Down (6/7) and Reveal Up/Down (8/9) families above. The rest of
-milestone 4 and special screens remain outstanding; choose the next small
-effect family through a separately approved plan. Obtain physical Windows 98 and XP
+Scroll Up/Down (6/7), Reveal Up/Down (8/9) and Peel Up/Down (10/11) families
+above. The rest of milestone 4 and special screens remain outstanding; choose
+the next small effect family through a separately approved plan. Obtain physical Windows 98 and XP
 [probe target-checklist](probe/TEST.TXT) results before claiming native
 hardware validation. Editor-release workflows remain unverified.

@@ -19,7 +19,8 @@ enum {
     ADD_PICTURE = 100, OPEN_PROJECT, SAVE_PROJECT, ADD_CUT, ADD_SLIDE,
     PLAY, STOP, SEEK, PICTURES, NAME, DURATION, TICK,
     ADD_SLIDE_ON_DOWN, ADD_SLIDE_OFF_UP, ADD_SLIDE_OFF_DOWN,
-    ADD_SCROLL_UP, ADD_SCROLL_DOWN, ADD_REVEAL_UP, ADD_REVEAL_DOWN
+    ADD_SCROLL_UP, ADD_SCROLL_DOWN, ADD_REVEAL_UP, ADD_REVEAL_DOWN,
+    ADD_PEEL_UP, ADD_PEEL_DOWN
 };
 
 static struct document {
@@ -56,6 +57,8 @@ static const char *effect_name(unsigned effect)
     case VC_SCROLL_DOWN: return "Scroll Down";
     case VC_REVEAL_UP: return "Reveal Up";
     case VC_REVEAL_DOWN: return "Reveal Down";
+    case VC_PEEL_UP: return "Peel Up";
+    case VC_PEEL_DOWN: return "Peel Down";
     }
     return "Unsupported";
 }
@@ -179,10 +182,11 @@ static void refresh(void)
 
     if (!painted || shown.top != frame.top || shown.bottom != frame.bottom ||
         shown.split != frame.split || shown.top_row != frame.top_row ||
-        shown.bottom_row != frame.bottom_row) {
+        shown.bottom_row != frame.bottom_row || shown.reflect != frame.reflect) {
         for (y = 0; y < VC_HEIGHT; ++y)
             row(rgb + y * VC_WIDTH * 3, y < frame.split ? frame.top : frame.bottom,
-                y < frame.split ? y + frame.top_row : y - frame.split + frame.bottom_row);
+                y < frame.split ? frame.top_row + (y > frame.reflect ? 2 * frame.reflect - y : y) :
+                                  y - frame.split + frame.bottom_row);
         if (palette)
             DeleteObject(palette);
         palette = make_palette();
@@ -504,6 +508,8 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case ADD_SCROLL_DOWN: stop(); add_cue(VC_SCROLL_DOWN); return 0;
         case ADD_REVEAL_UP: stop(); add_cue(VC_REVEAL_UP); return 0;
         case ADD_REVEAL_DOWN: stop(); add_cue(VC_REVEAL_DOWN); return 0;
+        case ADD_PEEL_UP: stop(); add_cue(VC_PEEL_UP); return 0;
+        case ADD_PEEL_DOWN: stop(); add_cue(VC_PEEL_DOWN); return 0;
         case PLAY:
             if (!doc->project.cues)
                 return 0;
@@ -750,13 +756,15 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
         !control("BUTTON", "Add Scroll Dow&n", WS_TABSTOP, 464, 211, 118, 23, ADD_SCROLL_DOWN) ||
         !control("BUTTON", "Add Re&veal Up", WS_TABSTOP, 332, 238, 118, 23, ADD_REVEAL_UP) ||
         !control("BUTTON", "Add Revea&l Down", WS_TABSTOP, 464, 238, 118, 23, ADD_REVEAL_DOWN) ||
-        !control("BUTTON", "&Play", WS_TABSTOP, 332, 265, 65, 23, PLAY) ||
-        !control("BUTTON", "S&top", WS_TABSTOP, 401, 265, 65, 23, STOP) ||
+        !control("BUTTON", "Add Peel &Up", WS_TABSTOP, 332, 265, 118, 23, ADD_PEEL_UP) ||
+        !control("BUTTON", "Add Peel &Down", WS_TABSTOP, 464, 265, 118, 23, ADD_PEEL_DOWN) ||
+        !control("BUTTON", "&Play", WS_TABSTOP, 332, 292, 65, 23, PLAY) ||
+        !control("BUTTON", "S&top", WS_TABSTOP, 401, 292, 65, 23, STOP) ||
         !(position = control("EDIT", "0", WS_BORDER | WS_TABSTOP | ES_NUMBER,
-                             475, 265, 54, 22, TICK)) ||
-        !control("BUTTON", "&Seek", WS_TABSTOP, 533, 265, 49, 23, SEEK) ||
+                             475, 292, 54, 22, TICK)) ||
+        !control("BUTTON", "&Seek", WS_TABSTOP, 533, 292, 49, 23, SEEK) ||
         !(status = control("STATIC", "Enter a filename from the workspace.", 0,
-                           332, 296, 250, 27, 0))) {
+                           16, 292, 304, 27, 0))) {
         error("Cannot initialize editor controls.");
         goto done;
     }

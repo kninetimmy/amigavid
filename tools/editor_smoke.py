@@ -43,7 +43,7 @@ def row_card(second):
 def slide_pixels(effect, duration, elapsed, moved, first, second):
     # fx.c Func/End and videocreator.asm buildscreen's SkipLines. These slices
     # are independent of the port's vc_frame representation and painted output.
-    if elapsed < 0 or (effect in (5, 7, 9) and duration == 1):
+    if elapsed < 0 or (effect in (5, 7, 9, 11) and duration == 1):
         return first
     if moved is None:
         return second
@@ -63,6 +63,18 @@ def slide_pixels(effect, duration, elapsed, moved, first, second):
         return first[:(255 - moved) * 960] + second[(255 - moved) * 960:]
     if effect == 9:
         return second[:moved * 960] + first[moved * 960:]
+    if effect in (10, 11):
+        # Peel Func: Reflect1=Value, Start2=2*Value only if Value<128,
+        # SkipLines2=2*Value. CopLoop2 waits at horizontal $01, before fetch:
+        # row Value is fetched once; the -80 modulo reverses subsequent rows
+        # (40-byte rows). buildscreen resets modulo on the second picture.
+        value = 255 - moved if effect == 10 else moved
+        base, other = (first, second) if effect == 10 else (second, first)
+        rows = [base[y * 960:(y + 1) * 960] for y in range(256)]
+        return b"".join(
+            other[y * 960:(y + 1) * 960] if value < 128 and y >= 2 * value
+            else rows[y if y <= value else 2 * value - y]
+            for y in range(256))
     raise ValueError(f"no source pixel expectation for effect {effect}")
 
 
@@ -302,7 +314,8 @@ def exercise(exe, digest, work, out):
     transitions = ((2, 104, "Slide On Up"), (3, 112, "Slide On Down"),
                    (4, 113, "Slide Off Up"), (5, 114, "Slide Off Down"),
                    (6, 115, "Scroll Up"), (7, 116, "Scroll Down"),
-                   (8, 117, "Reveal Up"), (9, 118, "Reveal Down"))
+                   (8, 117, "Reveal Up"), (9, 118, "Reveal Down"),
+                   (10, 119, "Peel Up"), (11, 120, "Peel Down"))
     for effect, button, label in transitions:
         for duration, samples in FIRST_SLIDE_SAMPLES.items():
             for start in ((0, 1) if effect >= 6 else (0,)):
@@ -322,14 +335,21 @@ def exercise(exe, digest, work, out):
                     if start:
                         drag(hwnd, 0, start, span=153 if duration == 255 else 124)
                     for sampled, expected in checks_first.items():
-                        capture(proc, hwnd, sampled, expected)
+                        pixels = capture(proc, hwnd, sampled, expected)
+                        if effect >= 10:
+                            (out / f"peel-first-{effect}-{duration}-{start}-{sampled}.rgb").write_bytes(pixels)
                     open_file(hwnd, saved.name, 102)
                     require(saved.read_bytes() == expected_bytes, "first transition authored fields differ")
+                    if effect >= 10:
+                        (out / saved.name).write_bytes(saved.read_bytes())
                     quit_editor(proc, hwnd)
                 with launch() as (proc, hwnd):
                     open_file(hwnd, saved.name, 101)
                     for sampled, expected in reversed(tuple(checks_first.items())):
                         capture(proc, hwnd, sampled, expected)
+                        if effect >= 10:
+                            log.append(f"PASS first Peel ID {effect}, a={duration}, start={start}, "
+                                       f"tick={sampled}: RGB24 SHA-256 {expected}")
                     for sampled, expected in checks_first.items():
                         play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
                                      lambda: frame(hwnd), log)
@@ -363,15 +383,22 @@ def exercise(exe, digest, work, out):
                     edit(hwnd, 110, duration)
                 command(hwnd, button)
                 for sampled, expected in checks_slide.items():
-                    capture(proc, hwnd, sampled, expected)
+                    pixels = capture(proc, hwnd, sampled, expected)
+                    if effect >= 10:
+                        (out / f"peel-cut-{effect}-{duration}-{sampled}.rgb").write_bytes(pixels)
                 open_file(hwnd, saved.name, 102)
                 require(saved.read_bytes() == expected_bytes,
                         f"{label}, a={duration}: authored fields differ")
+                if effect >= 10:
+                    (out / saved.name).write_bytes(saved.read_bytes())
                 quit_editor(proc, hwnd)
             with launch() as (proc, hwnd):
                 open_file(hwnd, saved.name, 101)
                 for sampled, expected in reversed(tuple(checks_slide.items())):
                     capture(proc, hwnd, sampled, expected)
+                    if effect >= 10:
+                        log.append(f"PASS Cut/Peel ID {effect}, a={duration}, tick={sampled}: "
+                                   f"RGB24 SHA-256 {expected}")
                 for sampled, expected in checks_slide.items():
                     play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
                                  lambda: frame(hwnd), log)
@@ -426,7 +453,7 @@ def exercise(exe, digest, work, out):
                         (work / "bad-slide.vid").write_bytes(bad)
                         open_file(hwnd, "bad-slide.vid", 101, modal=True)
                         dialog(proc, "Invalid or unsupported")
-                    for unsupported in (0, 10, 49, 900):
+                    for unsupported in (0, 12, 49, 900):
                         bad = expected_bytes.replace(f"25\n{effect}\n7\n".encode("ascii"),
                                                      f"25\n{unsupported}\n7\n".encode("ascii"))
                         (work / "bad-slide.vid").write_bytes(bad)
@@ -448,7 +475,7 @@ def exercise(exe, digest, work, out):
                     # the following Slide is legally adjacent, with no gap.
                     base, target = cards[1][1], cards[0][1]
                     target_screen = 6
-                    if effect in (7, 9) and duration == 1:
+                    if effect in (7, 9, 11) and duration == 1:
                         base, target = cards[0][1], cards[1][1]
                         target_screen = 7
                     following_tick = 25 + (2 if duration == 1 else 22)
@@ -467,6 +494,10 @@ def exercise(exe, digest, work, out):
                     open_file(hwnd, adjacent.name, 102)
                     require(adjacent.read_bytes() == following,
                             f"{label}, a={duration}: adjacent cue fields changed")
+                    if effect >= 10:
+                        (out / adjacent.name).write_bytes(adjacent.read_bytes())
+                    log.append(f"PASS ID {effect}, a={duration}: adjacent Slide at {following_tick}, "
+                               "exact Seek/Play frames and saved fields; no prior row state.")
                 quit_editor(proc, hwnd)
             log.append(f"PASS {label} ID {effect}, a={duration}: native author/save/restart/reopen, "
                        f"backward Seek and clock-paced Play at ticks {tuple(checks_slide)}, "

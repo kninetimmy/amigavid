@@ -374,10 +374,25 @@ def exercise(exe, digest, work, out):
                 require(sha(frame(hwnd)) == next(reversed(checks_slide.values())),
                         f"{label}, a={duration}: final target")
                 if duration == 25:
-                    for invalid in (0, 256):
+                    for index, invalid in enumerate(("2.5", "2x", " 2", "+2", "2 ", "",
+                                                     0, 256, "255x", "2" * 100)):
                         edit(hwnd, 110, invalid)
+                        require(control_text(hwnd, 110) == str(invalid),
+                                f"{label}: invalid duration text was truncated before submission")
                         command(hwnd, button, modal=True)
-                        dialog(proc, "effect duration of 1 to 255")
+                        until(proc, lambda: find(proc.pid, "#32770") or
+                              find_child(hwnd, None, "STATIC",
+                                         "Cue added. Drag its timeline marker to change the start tick."),
+                              f"{label}: duration {invalid!r} rejection or cue addition")
+                        rejected = bool(find(proc.pid, "#32770"))
+                        if rejected:
+                            dialog(proc, "effect duration of 1 to 255")
+                        unchanged = work / f"duration-{effect}-{index}.vid"
+                        open_file(hwnd, unchanged.name, 102)
+                        require(unchanged.read_bytes() == expected_bytes,
+                                f"{label}: invalid UI duration {invalid!r} changed saved bytes")
+                        require(rejected, f"{label}: invalid UI duration {invalid!r} had no error")
+                    for invalid in (0, 256):
                         bad = expected_bytes.replace(
                             f"25\n{effect}\n7\n25\n".encode("ascii"),
                             f"25\n{effect}\n7\n{invalid}\n".encode("ascii"))
@@ -404,15 +419,20 @@ def exercise(exe, digest, work, out):
                 if effect >= 6 and duration in (1, 25):
                     # Independently reserved lengths from CalculateLength;
                     # the following Slide is legally adjacent, with no gap.
+                    base, target = cards[1][1], cards[0][1]
+                    target_screen = 6
+                    if effect in (7, 9) and duration == 1:
+                        base, target = cards[0][1], cards[1][1]
+                        target_screen = 7
                     following_tick = 25 + (2 if duration == 1 else 22)
                     following = expected_bytes.replace(b"\n0\n0\n0\n2\n", b"\n0\n0\n0\n3\n")
-                    following += f"{following_tick}\n2\n6\n19\n0\n0\n0\n0\n0\nNOTEXT\n".encode("ascii")
+                    following += (f"{following_tick}\n2\n{target_screen}\n19\n"
+                                  "0\n0\n0\n0\n0\nNOTEXT\n").encode("ascii")
                     (work / "following.vid").write_bytes(following)
                     open_file(hwnd, "following.vid", 101)
-                    base = cards[0][1] if effect in (7, 9) and duration == 1 else cards[1][1]
                     for elapsed, moved in SLIDE_SAMPLES[19]:
                         sampled = following_tick + elapsed
-                        expected = sha(slide_pixels(2, 19, elapsed, moved, base, cards[0][1]))
+                        expected = sha(slide_pixels(2, 19, elapsed, moved, base, target))
                         capture(proc, hwnd, sampled, expected)
                         play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
                                      lambda: frame(hwnd), log)
@@ -435,7 +455,9 @@ def exercise(exe, digest, work, out):
             require(copied.read_bytes() == metadata, f"{label}: imported supported fields changed")
             quit_editor(proc, hwnd)
         log.append(f"PASS {label}: nondefault author/track, paired target and a-e/text byte-exact; "
-                   "invalid UI/import durations, unsupported IDs, conflicting imports/drags "
+                   "10 invalid UI duration strings (including 2.5 and overlong input) each "
+                   "report an error and save unchanged bytes; invalid import durations, "
+                   "unsupported IDs, conflicting imports/drags "
                    "preserve the open sequence.")
     with unsafe_links(work, out):
         (work / "link.vid").write_bytes(FIXTURE.replace(b"Tvc0dppm/27", b"Mjol0dppm/27"))

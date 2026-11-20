@@ -415,7 +415,7 @@ static void add_cue(unsigned effect)
 {
     struct vc_cue cue = { 0 };
     struct vc_project *p = &doc->project;
-    BOOL ok;
+    char text[4];
     LRESULT choice = SendMessageA(pictures, CB_GETCURSEL, 0, 0);
 
     if (choice == CB_ERR) {
@@ -425,8 +425,10 @@ static void add_cue(unsigned effect)
     cue.screen = (unsigned)choice + VC_FIRST_SCREEN;
     cue.effect = effect;
     if (effect != VC_CUT) {
-        cue.a = GetDlgItemInt(window, DURATION, &ok, FALSE);
-        if (!ok || !cue.a || cue.a > 255) {
+        if (GetWindowTextLengthA(duration) >= sizeof(text) ||
+            !GetWindowTextA(duration, text, sizeof(text)) ||
+            strspn(text, "0123456789") != strlen(text) ||
+            !(cue.a = (unsigned)atoi(text)) || cue.a > 255) {
             error("Enter an effect duration of 1 to 255 ticks.");
             return;
         }

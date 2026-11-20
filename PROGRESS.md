@@ -1277,6 +1277,46 @@ the refusal; probe, archive, viewer and release instructions still apply.
   original-Amiga reader/rendering comparison and editor-release acceptance
   remain outstanding; earlier guest evidence predates these effects.
 
+### Whole-field duration review repair — 2026-11-20
+
+- The shared native duration read now requires one to three ASCII digits
+  representing 1–255 before placement. It checks the full control length
+  before copying, so overlong text cannot become a valid truncated prefix.
+  Cut still ignores the duration field.
+- Native smoke sets each of `"2.5"`, `"2x"`, `" 2"`, `"+2"`, `"2 "`, empty,
+  `0`, `256`, `"255x"` and 100 digits in the actual Ticks control and confirms
+  the text was not truncated before submission. For each of IDs 2–9, a
+  placement with room to succeed must show the duration error and save
+  byte-identical project data after every refusal: **80 rejection checks**.
+- Red evidence: the expanded native check against the preserved `8ad81dd`
+  executable exited 1 at `invalid UI duration ' 2' changed saved bytes`.
+  The focused run skipped first-transition cases and kept duration 25 via
+  in-memory sample selection; no old executable or source was modified.
+  `"2.5"` and `"2x"` already refused on this host, so that specific decimal
+  failure was not reproduced. The old EXE, import report and smoke results
+  remain in `.editor/issue42-review1-old-8ad81dd/`; diagnostics are
+  `.editor/ISSUE42-REVIEW1-old-smoke.txt` and `-old-smoke-checked.txt`.
+- The adjacent following Slide now targets a visibly distinct card after
+  duration-1 Scroll Down and Reveal Down. Its Seek and timed Play comparisons
+  therefore detect a skipped following cue instead of accepting an unchanged
+  picture. All eight adjacent sequences retain exact saved-field checks.
+- All four required local commands **passed (exit 0)**, not run in CI:
+  `python tools/editor.py test`, `python tools/editor.py build`,
+  `python tools/editor.py smoke` and
+  `python -m unittest discover -s tools -p test_play_capture.py` (**3 tests**).
+  The full smoke retains all 120 author/reopen cases, eight adjacent
+  sequences and existing regression checks; no Play sample needed a retry.
+  Host: Windows 11 Pro x64 `26300.9974`, NTFS, Python 3.14.4, GCC 16.1.0.
+  The verified Watcom pin and PE/import profile above are unchanged.
+  Repaired `VCEDIT.EXE` SHA-256:
+  `ce053193ab0454d7f3f66e56bd357822437e9e328fb5b81115cc75e829dcaacb`.
+- Logs: `.editor/ISSUE42-REVIEW1-test.txt`, `-build.txt`, `-smoke.txt` and
+  `-unit.txt`, plus `.editor/HOST-SMOKE.txt` and `PE-IMPORTS.txt`.
+  The full README was reviewed again and remains accurate without changes.
+  Original code/artwork and generated artifacts remain private and ignored.
+  No Windows 98/XP guest, physical target or original-Amiga reader was run;
+  their qualification and editor-release acceptance remain outstanding.
+
 ## Open blockers
 
 - The [five missing files](#recovered-and-missing-files) still need locating;

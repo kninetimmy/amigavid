@@ -453,7 +453,11 @@ those disks were not booted again for this re-verification.
   before and after restart, playback, failed-open retention, and linked,
   locked, eligible and interrupted replacement checks passed.
 
-**Shared-marker selection (issue #20, 2026-11-20):**
+**Shared-marker selection (issue #20, 2026-11-20; historical):**
+
+The issue #20 results below describe the preserved PR #21 builds and their
+local logs, not the current hit rule. Issue #22 supersedes their target
+expectations where a drawn body contains the pointer.
 
 - The first implementation made stationary clicks cycle through cues at an
   isolated marker in timeline order and wrap. The status and tick box
@@ -585,6 +589,42 @@ those disks were not booted again for this re-verification.
   guest-evidence wording updated. The new build was tested only on the
   modern host, not on Windows 98/XP guests, physical targets, or the
   original Amiga reader.
+
+**Visible-marker targeting (issue #22, 2026-11-20):**
+
+- **Original-source evidence:** In the SHA-256-pinned `inputs/vc.zip`,
+  `vc/main.c:937–952,973–989,4586–4610` ties marker drawing and list
+  append order together. `CheckTopWindowSquares`
+  (`vc/main.c:1142–1204,1353–1358,1501–1504`) scans backward and tests
+  the pointer against the square rectangle, so the last drawn hit wins.
+  The rectangle is half-open (`vc/sebsgads.c:1214–1223`).
+  `vc/main.c:1182–1185,1212–1214` captures and preserves the horizontal
+  grab offset. The manual (`vc/docs/videocreator.manual:317–325`)
+  describes dragging the numbered square sideways to change its start.
+- **Win32 behavior:** Painting and input share the full marker rectangle.
+  With no rectangle hit, the existing five-pixel first-hit fallback
+  still applies. Cycling cues that share the winning start pixel is a
+  deliberate Win32 extension, not a claim about the original editor.
+- **Host evidence:** The new smoke failed against the preserved `95cbf79`
+  build (exit 1): x20 chose tick 44 instead of the sole visible hit at
+  tick 10. The corrected `python tools/editor.py build`,
+  `python tools/editor.py test` and `python tools/editor.py smoke` passed
+  locally (exit 0), not in CI, on Windows 11 Pro x64 26300.9974.
+  `VCEDIT.EXE` SHA-256:
+  `17a7c76f77b13b7283103a218846493f307959a2856bb61a64fa72b885fafe7c`.
+- Native smoke verifies x20 vs. x22 across both mixed layouts and the
+  singleton layout, first-hit fallback and empty seeks outside the row,
+  and exclusive right/bottom edges of a long Slide. It checks matching
+  status and tick text, wraparound, byte-identical selection saves,
+  the grab offset, and independent VC10 bytes after moving only the
+  selected non-first cue (11 → 503). Isolated moves, overlap refusal,
+  capture cancellation on project replacement and existing authoring,
+  preview, replay and save checks still pass. Local evidence is in
+  `.editor/PE-IMPORTS.txt`, `.editor/HOST-SMOKE.txt` and
+  `.editor/ISSUE22-BASELINE-smoke.txt`.
+- The full README was reviewed. It documents the gesture and separates
+  this host check from earlier guest evidence. No Windows 98/XP guest,
+  physical target or original-reader test was run for this build.
 
 ### Guest verification
 

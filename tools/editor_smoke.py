@@ -183,15 +183,23 @@ def exercise(exe, digest, work, out):
         return until(proc, lambda: (data := frame(hwnd)) and sha(data) == expected_hash and data,
                      f"expected full preview at tick {tick}")
 
-    def click_track(hwnd, x):
+    def click_track(hwnd, x, y=320):
         for msg, wp in ((0x0201, 1), (0x0202, 0)):
-            checked(send(hwnd, msg, wp, x | (320 << 16), 2, 1000, None))
+            checked(send(hwnd, msg, wp, x | (y << 16), 2, 1000, None))
+
+    def expect_cue(hwnd, tick, context):
+        actual = control_text(hwnd, 111)
+        require(actual == str(tick) and
+                find_child(hwnd, None, "STATIC", f"Selected cue at tick {tick}."),
+                f"{context}: expected selected cue at tick {tick}, got tick field {actual!r}")
+
+    def drag_track(hwnd, start, end, y=320):
+        for msg, wp, x in ((0x0201, 1, start), (0x0200, 1, end), (0x0202, 0, end)):
+            checked(send(hwnd, msg, wp, x | (y << 16), 2, 1000, None))
 
     def drag(hwnd, start, end, span=124):
-        # The timeline initially spans 0..124 across 552 pixels at (16,316).
-        coord = lambda tick: (16 + round(tick * 552 / span)) | (320 << 16)
-        for msg, wp, tick in ((0x0201, 1, start), (0x0200, 1, end), (0x0202, 0, end)):
-            checked(send(hwnd, msg, wp, coord(tick), 2, 1000, None))
+        # Press at the painted start; round the desired drop to the nearest pixel.
+        drag_track(hwnd, 16 + start * 552 // span, 16 + round(end * 552 / span))
 
     def open_file(hwnd, name, button, modal=False):
         edit(hwnd, 109, name)
@@ -273,14 +281,14 @@ def exercise(exe, digest, work, out):
             quit_editor(proc, hwnd)
             log.append("PASS project replacement during capture cancels stationary and moving releases of a nonexistent old cue and a reused valid index; saved replacement bytes unchanged and new selection valid.")
 
-        # Span 4025: x17 and x22 are first and nearest; x27 is in range but neither.
-        for layout, ticks, target in (
-            ("unshared", (10, 44, 4000), 10),
-            ("distant-shared", (10, 44, 3999, 4000), 10),
-            ("incidental-shared", (10, 44, 81, 82, 4000), 10),
-            ("first-shared", (10, 11, 44, 4000), 44),
-            ("nearest-shared", (10, 44, 45, 4000), 44),
-            ("both-shared", (10, 11, 44, 45, 4000), 44),
+        # At span 4025 the first two starts paint [17,23) and [22,28).
+        for layout, ticks in (
+            ("left-shared", (10, 11, 44, 4000)),
+            ("right-shared", (10, 44, 45, 4000)),
+            ("unshared", (10, 44, 4000)),
+            ("distant-shared", (10, 44, 3999, 4000)),
+            ("incidental-shared", (10, 44, 81, 82, 4000)),
+            ("both-shared", (10, 11, 44, 45, 4000)),
         ):
             layout_file = work / f"{layout}.vid"
             cues = tuple((tick, identity) for identity, tick in enumerate(ticks, 1))
@@ -288,22 +296,53 @@ def exercise(exe, digest, work, out):
             layout_file.write_bytes(layout_bytes)
             with launch() as (proc, hwnd):
                 open_file(hwnd, layout_file.name, 101)
-                drag(hwnd, 44, 500, span=4025)  # x22 -> x85, no prior selection.
-                expected = sorted((503 if tick == target else tick, identity) for tick, identity in cues)
-                saved = work / f"{layout}-moved.vid"
-                open_file(hwnd, saved.name, 102)
-                require(saved.read_bytes() == shared_markers(expected),
-                        f"{layout}: x22 drag did not move only tick {target} to 503")
-                open_file(hwnd, layout_file.name, 101)
-                click_track(hwnd, 22)
-                require(control_text(hwnd, 111) == str(target) and
-                        find_child(hwnd, None, "STATIC", f"Selected cue at tick {target}."),
-                        f"{layout}: x22 click did not select tick {target}")
+                for x, y, target in ((20, 320, 10), (22, 324, 44), (22, 325, 10),
+                                     (22, 317, 44), (22, 316, 10)):
+                    click_track(hwnd, x, y)
+                    expect_cue(hwnd, target, f"{layout} click at ({x}, {y})")
+                if 45 in ticks:
+                    for tick in (44, 45, 44):
+                        click_track(hwnd, 22)
+                        expect_cue(hwnd, tick, f"{layout} overlap cycle")
+                    log.append(f"PASS {layout}: overlap cycles ticks 44 -> 45 -> 44.")
                 selection = work / f"{layout}-selection.vid"
                 open_file(hwnd, selection.name, 102)
                 require(selection.read_bytes() == layout_bytes, f"{layout}: click changed cue data")
+                open_file(hwnd, layout_file.name, 101)
+                drag_track(hwnd, 22, 85)  # No prior selection: first cue at the winning start.
+                expected = sorted((503 if tick == 44 else tick, identity) for tick, identity in cues)
+                saved = work / f"{layout}-moved.vid"
+                open_file(hwnd, saved.name, 102)
+                require(saved.read_bytes() == shared_markers(expected),
+                        f"{layout}: x22 drag did not move only tick 44 to 503")
                 quit_editor(proc, hwnd)
-            log.append(f"PASS {layout}: x22 -> x85 drag moves only tick {target} -> 503; x22 click selects tick {target} and saves unchanged bytes.")
+            log.append(f"PASS {layout}: x20 selects tick 10; x22 selects tick 44 in the row and tick 10 just outside; clicks save unchanged bytes; x22 drag moves only cue 44 -> 503.")
+
+        # Slide at tick 25 paints [127,211) at span 124. Grab far from its start.
+        long_marker = work / "long-marker.vid"
+        long_bytes = authored(*names, 25, 19)
+        long_marker.write_bytes(long_bytes)
+        with launch() as (proc, hwnd):
+            open_file(hwnd, long_marker.name, 101)
+            for x, y, tick in ((211, 324, 44), (190, 325, 39)):
+                click_track(hwnd, x, y)
+                require(control_text(hwnd, 111) == str(tick) and
+                        find_child(hwnd, None, "STATIC", "Timeline seek."),
+                        f"long marker: ({x}, {y}) outside the body did not seek")
+            for x in (210, 190):
+                click_track(hwnd, x, 324)
+                expect_cue(hwnd, 25, f"long marker at ({x}, 324)")
+            saved = work / "long-selection.vid"
+            open_file(hwnd, saved.name, 102)
+            require(saved.read_bytes() == long_bytes, "long marker click moved a cue")
+            drag_track(hwnd, 190, 235, y=324)
+            saved = work / "long-moved.vid"
+            open_file(hwnd, saved.name, 102)
+            # Preserve the 63-pixel grab offset: 235 - 63 = 172 maps to tick 35.
+            require(saved.read_bytes() == authored(*names, 35, 19),
+                    "long marker drag did not preserve the grab offset or changed other cue data")
+            quit_editor(proc, hwnd)
+            log.append("PASS full long Slide body (right/bottom exclusive) selects without moving; drag preserves grab offset and moves only Slide 25 -> 35.")
 
         with launch() as (proc, hwnd):
             open_file(hwnd, crowded.name, 101)
@@ -313,13 +352,10 @@ def exercise(exe, digest, work, out):
             for digit in "999":
                 checked(send(get_child(hwnd, 111), 0x0102, ord(digit), 1, 2, 1000, None))
             require(control_text(hwnd, 111) == "999", "unsubmitted tick typing did not stick")
-            # At span 4025, three starts paint at x=17; tick 44 paints at x=22.
+            # x20 is inside only the x17 bodies, even though x22 is nearer.
             for tick in (10, 11, 12, 10):
-                click_track(hwnd, 17)
-                actual = control_text(hwnd, 111)
-                require(actual == str(tick), f"shared marker expected tick {tick}, got {actual}")
-                require(find_child(hwnd, None, "STATIC", f"Selected cue at tick {tick}."),
-                        f"shared marker did not identify the selected cue at tick {tick}")
+                click_track(hwnd, 20)
+                expect_cue(hwnd, tick, "shared marker cycle at x20")
             # Even a stationary click at the edge of the hit area must not move it.
             click_track(hwnd, 12)
             require(control_text(hwnd, 111) == "11", "shared marker selection at hit-area edge")
@@ -328,18 +364,18 @@ def exercise(exe, digest, work, out):
             require(selection.read_bytes() == original, "selection alone changed saved cue data")
             click_track(hwnd, 17)
             require(control_text(hwnd, 111) == "12", "saving lost the selected cue")
-            click_track(hwnd, 27)
+            click_track(hwnd, 27, y=316)
             require(control_text(hwnd, 111) == "44", "nearby marker's outer hit-area edge")
-            click_track(hwnd, 28)
+            click_track(hwnd, 28, y=316)
             require(control_text(hwnd, 111) == "88", "outside right hit area did not seek")
             require(find_child(hwnd, None, "STATIC", "Timeline seek."),
                     "empty-track seek left stale selected-tick status")
-            click_track(hwnd, 11)
+            click_track(hwnd, 11, y=316)
             require(control_text(hwnd, 111) == "0", "outside left hit area did not seek")
+            click_track(hwnd, 22)
+            expect_cue(hwnd, 44, "overlap selects the last-drawn marker")
             click_track(hwnd, 20)
-            require(control_text(hwnd, 111) == "44", "did not choose the nearer right marker")
-            click_track(hwnd, 19)
-            require(control_text(hwnd, 111) == "10", "nearby selection stole the nearer left marker")
+            expect_cue(hwnd, 10, "selected neighbor cannot steal the sole painted hit")
             click_track(hwnd, 17)
             require(control_text(hwnd, 111) == "11", "selection before short no-op drag")
             drag(hwnd, 44, 51, span=4025)  # x22 -> x23 stays in the two-pixel no-move zone.
@@ -352,7 +388,7 @@ def exercise(exe, digest, work, out):
             click_track(hwnd, 17)
             drag(hwnd, 44, 51, span=4025)
             quit_editor(proc, hwnd)  # Selection alone must not prompt to discard changes.
-            log.append("PASS span 4025: x17 cycles 10 -> 11 -> 12 -> 10 excluding tick 44 at x22; nearest hits, both hit-area edges, outside seeks clear selection status, byte-exact selection save and clean close.")
+            log.append("PASS span 4025: x20 cycles ticks 10 -> 11 -> 12 -> 10; fallback, empty seeks, exact selection save and clean close.")
             log.append("PASS typing 999 leaves it unsubmitted; selecting cue 10 at the existing playhead replaces it with 10 and reports the selected tick.")
             log.append("PASS short no-op x22 -> x23 drag selects tick 44 with matching tick/status, unchanged saved bytes and clean close.")
 
@@ -363,12 +399,14 @@ def exercise(exe, digest, work, out):
             open_file(hwnd, direct.name, 102)
             require(direct.read_bytes() == shared_markers(((11, 2), (12, 3), (44, 4), (503, 1), (4000, 5))),
                     "shared-marker drag without prior selection did not move the first cue")
+            click_track(hwnd, 20)
+            expect_cue(hwnd, 11, "selection after first-cue reordering")
             open_file(hwnd, crowded.name, 101)
             for tick in (10, 11):
-                click_track(hwnd, 17)
-                require(control_text(hwnd, 111) == str(tick), "selection after project reopen")
-            drag(hwnd, 11, 500, span=4025)
-            # Drop x=85 maps independently to round(69 * 4025 / 552) = 503.
+                click_track(hwnd, 20)
+                expect_cue(hwnd, tick, "selection after project reopen")
+            drag_track(hwnd, 20, 88)
+            # x88 minus the 3-pixel grab offset gives x85, or tick 503.
             expected = shared_markers(((10, 1), (12, 3), (44, 4), (503, 2), (4000, 5)))
             moved = work / "shared-moved.vid"
             open_file(hwnd, moved.name, 102)
@@ -419,13 +457,13 @@ def exercise(exe, digest, work, out):
             click_track(hwnd, 23)
             require(control_text(hwnd, 111) == "52", "right marker before equidistant hit")
             for tick in (10, 11, 12, 10):
-                click_track(hwnd, 20)  # Equidistant from x17 and x23: timeline order wins.
-                require(control_text(hwnd, 111) == str(tick), "equidistant marker tie order")
+                click_track(hwnd, 20, y=316)  # No body hit: timeline order wins.
+                expect_cue(hwnd, tick, "equidistant fallback order")
             saved = work / "tied-selection.vid"
             open_file(hwnd, saved.name, 102)
             require(saved.read_bytes() == tied_bytes, "equidistant selection changed cue data")
             quit_editor(proc, hwnd)
-            log.append("PASS equidistant x20 hits choose x17 before x23 regardless of prior selection; 10 -> 11 -> 12 -> 10 wrap and saved bytes unchanged.")
+            log.append("PASS equidistant fallback outside the row chooses x17 before x23; 10 -> 11 -> 12 -> 10 wrap and saved bytes unchanged.")
 
         with launch() as (proc, hwnd):
             open_file(hwnd, fixture.name, 101)

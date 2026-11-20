@@ -31,7 +31,7 @@ static HWND window, files, pictures, duration, position, status;
 static unsigned long tick, shown_tick;
 static DWORD started;
 static int playing, dragging = -1, drag_x, dirty;
-static int selected = -1, drag_start_x, drag_moved;
+static int selected = -1, drag_start_x, drag_offset, drag_moved;
 static int painted;
 static struct vc_frame shown;
 static unsigned char rgb[VC_WIDTH * VC_HEIGHT * 3], indexed[VC_WIDTH * VC_HEIGHT];
@@ -221,33 +221,41 @@ static unsigned long to_tick(int x)
     return ((unsigned long)(x - GRID_X) * visible_ticks() + GRID_W / 2) / GRID_W;
 }
 
-static int hit_shares_pixel(unsigned i)
+static RECT marker_rect(const struct vc_cue *cue)
 {
-    const struct vc_project *p = &doc->project;
-    /* Both candidates start their pixel group; check the next cue. */
-    return i + 1 < p->cues && to_x(p->cue[i].tick) == to_x(p->cue[i + 1].tick);
+    RECT marker;
+
+    marker.left = to_x(cue->tick);
+    marker.right = to_x(cue->tick + vc_length(cue));
+    if (marker.right < marker.left + 6)
+        marker.right = marker.left + 6;
+    marker.top = GRID_Y + 1;
+    marker.bottom = GRID_Y + 9;
+    return marker;
 }
 
-static int hit_cue(int x)
+static int hit_cue(int x, int y)
 {
-    int first = -1, nearest = -1, closest = 6, distance;
-    unsigned i;
+    const struct vc_project *p = &doc->project;
+    POINT point;
+    RECT marker;
+    int i;
 
-    for (i = 0; i < doc->project.cues; ++i) {
-        distance = abs(x - to_x(doc->project.cue[i].tick));
-        if (distance > 5)
-            continue;
-        if (first < 0)
-            first = (int)i;
-        if (distance < closest) {
-            closest = distance;
-            nearest = (int)i;  /* Equal distances keep timeline order. */
+    point.x = x;
+    point.y = y;
+    /* Paint in timeline order; hit the topmost body, then enter its group. */
+    for (i = (int)p->cues - 1; i >= 0; --i) {
+        marker = marker_rect(&p->cue[i]);
+        if (PtInRect(&marker, point)) {
+            while (i > 0 && to_x(p->cue[i - 1].tick) == marker.left)
+                --i;
+            return i;
         }
     }
-    /* Preserve the legacy target unless one of the two candidates is shared. */
-    if (first != nearest && (hit_shares_pixel(first) || hit_shares_pixel(nearest)))
-        return nearest;
-    return first;
+    for (i = 0; i < (int)p->cues; ++i)
+        if (abs(x - to_x(p->cue[i].tick)) <= 5)
+            return i;
+    return -1;
 }
 
 static void list_picture(unsigned index)
@@ -428,9 +436,10 @@ static void text_at(HDC dc, int x, int y, const char *text)
 static void draw_timeline(HDC dc)
 {
     RECT area = { 0, 269, WIDTH, HEIGHT };
+    RECT marker;
     const struct vc_cue *cue;
     unsigned i;
-    int x, right;
+    int x;
     char label[96];
 
     FillRect(dc, &area, (HBRUSH)(COLOR_WINDOW + 1));
@@ -442,11 +451,10 @@ static void draw_timeline(HDC dc)
     LineTo(dc, GRID_X + GRID_W, GRID_Y);
     for (i = 0; i < doc->project.cues; ++i) {
         cue = &doc->project.cue[i];
-        x = to_x(cue->tick);
-        right = to_x(cue->tick + vc_length(cue));
-        Rectangle(dc, x, GRID_Y + 1, right > x + 6 ? right : x + 6, GRID_Y + 9);
+        marker = marker_rect(cue);
+        Rectangle(dc, marker.left, marker.top, marker.right, marker.bottom);
         wsprintfA(label, "%lu %s #%u", cue->tick, effect_name(cue->effect), cue->screen);
-        text_at(dc, x, GRID_Y + 11 + 16 * (i % 2), label);
+        text_at(dc, marker.left, GRID_Y + 11 + 16 * (i % 2), label);
     }
     x = dragging >= 0 ? drag_x : to_x(tick);
     MoveToEx(dc, x, GRID_Y - 9, NULL);
@@ -519,12 +527,14 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         if (y < GRID_Y - 9 || y > GRID_BOTTOM)
             return 0;
         stop();
-        dragging = hit_cue(x);
+        dragging = hit_cue(x, y);
         if (dragging >= 0) {
             if (selected >= 0 && (unsigned)selected < doc->project.cues &&
                 to_x(doc->project.cue[selected].tick) == to_x(doc->project.cue[dragging].tick))
                 dragging = selected;
-            drag_start_x = drag_x = x;
+            drag_x = to_x(doc->project.cue[dragging].tick);
+            drag_start_x = x;
+            drag_offset = x - drag_x;
             drag_moved = 0;
             SetCapture(hwnd);
             return 0;
@@ -539,7 +549,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             x = (short)LOWORD(lp);
             if (x != drag_start_x)
                 drag_moved = 1;
-            drag_x = to_x(to_tick(x));
+            drag_x = to_x(to_tick(x - drag_offset));
             InvalidateRect(hwnd, NULL, FALSE);
         }
         return 0;
@@ -570,9 +580,7 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 }
                 next = cue.tick;
             } else {
-                next = to_tick(x);
-                if (abs(x - to_x(cue.tick)) <= 2)
-                    next = cue.tick;
+                next = abs(x - drag_start_x) <= 2 ? cue.tick : to_tick(x - drag_offset);
             }
             if (next != cue.tick) {
                 cue.tick = next;

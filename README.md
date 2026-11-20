@@ -42,7 +42,8 @@ canonical colors), as allowed by issue #16; no tolerance is used. See the
   [viewer evidence](PROGRESS.md#milestone-2--real-asset-ilbm-viewer).
 
 Milestone 3 adds `VCEDIT.EXE`, a separate editor for a two-picture sequence.
-The probe and viewer remain available and unchanged.
+The probe and viewer remain available and unchanged. Milestone 4 will cover
+the remaining effects and special screens.
 
 ## Build and test the Win32 probe
 
@@ -208,17 +209,18 @@ pictures to that folder first. It must be on local FAT on Windows 98.
    relaunch, enter the same filename, **Open VID** (Ctrl+O), then **Play**.
    Move the file together with its pictures to play on another PC.
 
-When cue starts share a marker pixel, successive clicks without dragging
-select their cues in timeline order and wrap to the first. Within five pixels
-of the pointer, clicks and drags normally use the first marker in timeline
-order. If either that marker or the nearest marker shares a pixel with another
-cue, the nearest marker wins, with ties going to the earlier marker. A shared
-pixel elsewhere does not affect the hit. The tick box and status identify the
-selected cue's start tick, replacing any unsubmitted tick text. Selection
-alone does not change saved cue data. Drag from the marker to move its
-selected cue, or its first cue if none is selected there. A short drag that
-leaves a cue in place still selects it. Clicking empty track clears selection
-and seeks. Opening another project cancels any pending drag and clears
+Press anywhere inside a drawn marker to target its start. If marker bodies
+overlap at the pointer, the last-drawn one wins. If the pointer is not inside
+any body, the first marker in timeline order whose start is within five
+horizontal pixels wins. Clicking empty track clears selection and seeks.
+
+When multiple cues start at the winning pixel, successive stationary clicks
+select them in timeline order and wrap to the first. The tick box and status
+identify the selected cue's start tick, replacing any unsubmitted tick text.
+Selection alone does not change saved cue data. Drag to move the selected cue
+at that pixel, or the first cue if none is selected there. The drag keeps the
+horizontal grab offset; a short drag that leaves the cue in place still
+selects it. Opening another project cancels any pending drag and clears
 selection.
 
 Use a workspace you control; don't edit its files in another program during
@@ -279,10 +281,11 @@ guests using a 98 save that references a filename with `~`. The
 named-stream fix repeated the same-file demo and verified ordinary NTFS
 replacement on XP. The earlier 98 FAT32 run also checked successful
 replacement, rejection of a true short alias, and preservation of a
-preexisting backup. Shared-marker selection (#20) was tested on Windows 11,
-not in those guests. The [milestone 3 evidence](PROGRESS.md#milestone-3--two-picture-editor)
-separates host and guest results. The original Amiga reader and physical
-hardware are not verified.
+preexisting backup. Visible-marker targeting and shared-marker selection
+(#22) were tested on Windows 11, not in those guests. The
+[milestone 3 evidence](PROGRESS.md#milestone-3--two-picture-editor) separates
+host and guest results. The original Amiga reader and physical hardware are
+not verified.
 
 Release acceptance is stricter: the same portable ZIP must pass the edit,
 save, reopen and playback workflow on both Windows families. A modern-host

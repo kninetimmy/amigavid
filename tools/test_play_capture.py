@@ -16,7 +16,7 @@ EXPECTED = hashlib.sha256(PIXELS).hexdigest()
 
 class PlayCaptureTests(unittest.TestCase):
     def test_three_overshoots_fail_smoke_with_ordered_stop_ticks(self):
-        stop = Mock(side_effect=[11, 12, 13])
+        stop = Mock(side_effect=[13, 11, 12])
         frame = Mock()
         errors = io.StringIO()
 
@@ -28,7 +28,7 @@ class PlayCaptureTests(unittest.TestCase):
             self.assertEqual(editor.main(), 1)
         self.assertIn("editor: timed Play did not stop at tick 10 in three attempts",
                       errors.getvalue())
-        self.assertIn("stop ticks by attempt: [11, 12, 13]", errors.getvalue())
+        self.assertIn("stop ticks by attempt: [13, 11, 12]", errors.getvalue())
         self.assertEqual(stop.call_count, 3)
         frame.assert_not_called()
 

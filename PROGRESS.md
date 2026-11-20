@@ -1281,7 +1281,8 @@ the refusal; probe, archive, viewer and release instructions still apply.
 
 - The shared native duration read now requires one to three ASCII digits
   representing 1–255 before placement. It checks the full control length
-  before copying, so overlong text cannot become a valid truncated prefix.
+  before copying. This does not prevent the native edit control's three-character
+  input limit from truncating a real paste before validation (see below).
   Cut still ignores the duration field.
 - Native smoke sets each of `"2.5"`, `"2x"`, `" 2"`, `"+2"`, `"2 "`, empty,
   `0`, `256`, `"255x"` and 100 digits in the actual Ticks control and confirms
@@ -1316,6 +1317,39 @@ the refusal; probe, archive, viewer and release instructions still apply.
   Original code/artwork and generated artifacts remain private and ignored.
   No Windows 98/XP guest, physical target or original-Amiga reader was run;
   their qualification and editor-release acceptance remain outstanding.
+
+### Native paste review repair blocked — 2026-11-20
+
+- Review cycle 2 identifies a gap in the preceding evidence: smoke uses
+  `WM_SETTEXT`, which bypasses the edit limit. Its passing results do not
+  establish that a real paste of `1999` is refused rather than accepting
+  a truncated `199`. That behavior was not reproduced in this session.
+- On Windows 11 Pro x64 `26300.9974`, attempted an isolated window station
+  before any clipboard operation. `CreateWindowStationW` with a unique name
+  returned `WinError 5` (access denied); named creation requires administrator
+  rights. The documented unnamed form with `CWF_CREATE_ONLY` returned
+  `WinError 183` (already exists). Reusing that existing station would not
+  establish an isolated clipboard, so the check stopped. No clipboard was
+  read, emptied, overwritten or logged; no editor paste or saved-byte
+  comparison ran. No elevation or destructive clipboard fallback was used.
+- Preserved the pre-fix `10c4d2413701383f449fa5dd25c6c9fe73d2f2c1` executable,
+  import report and earlier smoke log in
+  `.editor/issue42-review2-old-10c4d24/`, plus the unfinished, unexecuted-worker
+  harness sources as `attempted-editor_smoke.py` and `attempted-editor.py`.
+  EXE SHA-256 remains
+  `ce053193ab0454d7f3f66e56bd357822437e9e328fb5b81115cc75e829dcaacb`.
+  Isolation failures (both exit 1) are recorded in
+  `.editor/ISSUE42-REVIEW2-old-paste.txt` and
+  `ISSUE42-REVIEW2-old-paste-isolated.txt`. These are local-only artifacts.
+- Removed the unfinished harness from tracked changes; no runtime repair was
+  made. The four required checks were not rerun: there is no repaired source
+  to verify, and the existing smoke does not exercise native paste. Criterion
+  3 remains unsatisfied. The Architect must provide a safely isolated native
+  paste environment before reproduction, repair and all four checks resume.
+- Reviewed the full README; its commands, effect documentation and explicit
+  host/guest qualification limits remain current. No original code/artwork
+  was published. Windows 98/XP, physical-target, original-reader and release
+  qualification remain outstanding.
 
 ## Open blockers
 

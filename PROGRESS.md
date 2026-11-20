@@ -416,6 +416,25 @@ those disks were not booted again for this re-verification.
   with the same viewer EXE hash, two original decodes and 16 generated
   cases. The existing guest probe and viewer qualification was not rerun.
 
+**Replacement protection and canonical-name fix:**
+
+- `python tools/editor.py build`: same pin, PE32 x86 GUI 4.0, static
+  WinMain, direct GDI32/KERNEL32/USER32, no delay imports. `VCEDIT.EXE`
+  SHA-256 `7dbf2fc820d0776263763e6d130d3240f30cd4bfb3a4f19b4d7a21e78511e464`.
+- `python tools/editor.py test`: both active LF/CRLF fixtures, exact
+  output and frame geometry, and 27 rejection cases passed. Native NT
+  scratch checks rejected a different DACL with empty staging and no
+  rename, preserved that file's bytes and DACL, and preserved an
+  ordinary project's inherited DACL on successful replacement. A real
+  8.3 alias was refused; full long and literal `~` names replaced
+  successfully. Missing metadata APIs refused safely. The existing
+  pinned-directory, rollback, retained-backup and cleanup-warning cases
+  still passed.
+- `python tools/editor.py smoke`: Windows 11 repeated native authoring,
+  seven full-frame comparisons before and after restart, paired fixture
+  round-trip, failed-open retention and the linked, locked, eligible
+  and interrupted replacement cases with this EXE.
+
 ### Guest verification
 
 **First implementation (before review fixes):**
@@ -514,6 +533,43 @@ and release qualification remain unverified or out of scope.
   helpers for this run have the `-fix.py` suffix. Neither the original
   Amiga reader nor physical Windows hardware was exercised.
 
+**Replacement protection and canonical-name fix (fresh guests):**
+
+- The same QEMU configurations and clean baselines were used on Windows
+  98 SE `4.10.2222` and x86 XP Professional SP3 `2600.xpsp.080413-2111`.
+  Both used the host build above. `A:\SETUP.BAT` installed the EXE and
+  pictures; `FC /B` matched each guest EXE with the read-only transfer
+  copy. Both copied `BG.IFF` to `BG~1.IFF` using `copy /b` and ran
+  `C:\M3EDIT\VCEDIT.EXE C:\M3EDIT`.
+- On 98 SE (FAT32), authored Cut at 0 and Slide at 25 with `a=19`, dragged
+  Slide to 50, saved `DEMO.VID`, restarted, reopened, sought and played
+  to completion. Read 135 bytes from the shut-down overlay, matching the
+  independently encoded project and SHA-256
+  `3d04d2a152738c4c2e8c984acf1325b163c2c5d55489595009911968deeb3686`.
+- FAT32 replacement controls: `dir C:\M3EDIT` identified `LONGPR~1.VID`
+  as the alias for `long project file.vid`. Open by alias succeeded; Save
+  refused. Replacement of the literal `lit~1.vid` moved its Slide from
+  tick 50 to 60 and left no `.bak` or `.tmp`. After placing a known `.bak`
+  with `copy /b`, another Save refused. Offline FAT32 inspection verified
+  the unchanged long name and original bytes, the updated literal-name
+  bytes, and the separate backup's original bytes. This was not a forced
+  mid-rename failure or a power-loss test.
+- On XP SP3 (NTFS), `copy /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` followed by
+  `fc /b A:\DEMO.VID C:\M3EDIT\DEMO.VID` transferred the exact 98 save.
+  Ctrl+O and F5 opened and replayed it to completion. The two guests'
+  11 fresh full crops matched all 81,920 pixels per crop at the same
+  ticks and hashes as above. The 98 crops use the independently
+  measured Cirrus conversion; XP crops use canonical RGB24.
+  XP also saved and then replaced an ordinary `CHECK.VID`; `fc /b`
+  matched it to `DEMO.VID`, and `dir /a` showed no `.bak` or `.tmp`.
+- Preserve `.editor/guest-acl/` (`KEEP.txt`, `MANIFEST.json`), including
+  the final transfer manifest, original guest-written file, host logs,
+  guest captures, commands and offline FAT verification. `qemu-img check`
+  passed for both shut-down overlays; all three base/backing hashes were
+  unchanged. Keep both earlier guest evidence sets and dependent private
+  inputs. Original Amiga reader, 98 FE and XP RTM editor runs, physical
+  hardware and release qualification remain unverified.
+
 ### Before/after inventory
 
 | Element | Before → after |
@@ -526,6 +582,29 @@ and release qualification remain unverified or out of scope.
 | `editor/local_test.c` | No native I/O fault tests → isolated checks for pinned directory identity, rollback and publication with a cleanup warning. Not linked into the editor. |
 | `README.md`, `PROGRESS.md` | Milestone 3 was the next independent development step → editor build/run/workflow instructions and separate host/guest evidence. Full README reviewed; viewer, archive and probe instructions and release gates still apply. |
 | `asset/ilbm.c`, `asset/ilbm.h`, `asset/viewer.c`, `tools/asset.py`, `tools/asset_smoke.py`, probe and archive inventory | No changes. The editor links the existing ILBM decoder, uses the same indexed DIB technique and reuses the existing pins, tool extraction and PE checks; the viewer's file-path behavior, size limits and guest evidence still apply only to the viewer. |
+
+**Replacement-only follow-up:** Previously NT replacement wrote project
+bytes with whatever permissions the stage inherited. Now every NT
+replacement uses `NtQuerySecurityObject` on the held original and empty
+stage before writing, and refuses when the access metadata differs or
+cannot be read (owner, group, DACL, and on applicable NT versions,
+integrity label and resource/scope information). Encrypted originals
+are refused rather than copied to a potentially unencrypted stage.
+The comparison is intentionally conservative, not an ACL editor, audit
+policy migration, or a guarantee against concurrent workspace changes.
+First saves still use normal inherited protection.
+
+Previously either platform could publish or roll back to a typed 8.3
+alias instead of the prior long name. Now every existing destination
+must pass the real-leaf check before the editor moves the original:
+NT matches the pinned directory entry and open file ID; 9x checks the
+local FAT long name using `FindFirstFileA`. Genuine aliases can still
+be read but not used for replacement. A literal `~` name remains valid.
+Directory identity, link and sharing checks, no-overwrite backup,
+rollback and cleanup behavior are otherwise unchanged. The host driver
+and `tools/editor.py test` add scratch checks only; no guest or test
+hook is linked into the editor. GUI, model, original format, decoder,
+probe and viewer behavior are unchanged by this follow-up.
 
 ## Open blockers
 

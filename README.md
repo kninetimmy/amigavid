@@ -238,6 +238,15 @@ Initially, the NT editor pinned the workspace only for reads and used the
 launch path again for saves. Now **all** NT save paths (destination/backup
 checks, staging, renames, rollback and cleanup) stay relative to the pinned
 directory or use checked file handles, even if the drive spelling changes.
+Previously an NT replacement wrote to a file with inherited permissions
+without checking the original project's permissions. Now it writes no
+project bytes unless the original and empty stage have matching access
+metadata. If the check fails or the project uses file encryption, save
+under a new name in a suitably protected workspace.
+Previously a typed 8.3 alias could become the project's name after
+replacement or rollback. Both save paths now refuse replacement through
+a true short alias; reopen by the full filename. A literal `~` filename
+is still valid. This applies to every replacement, not to reads.
 The Windows 98 local FAT/FAT32 fallback still uses absolute paths; this is
 not a power-loss guarantee for FAT.
 
@@ -246,8 +255,10 @@ not a power-loss guarantee for FAT.
 Before milestone 3, the PRD's first useful demo was a goal: open real
 editor artwork on Windows 98, add two pictures and a timed transition, save
 the project, and play that file on XP with the same executable. The
-corrected editor passes on Windows 98 SE and x86 XP Professional SP3
-QEMU guests using a 98 save that references a filename with `~`. The
+fixed editor passes on Windows 98 SE and x86 XP Professional SP3
+QEMU guests using a 98 save that references a filename with `~`. The 98
+FAT32 run also checked successful replacement, rejection of a true short
+alias, and preservation of a preexisting backup. The
 [milestone 3 evidence](PROGRESS.md#milestone-3--two-picture-editor) separates
 host and guest results. The original Amiga reader and physical hardware
 are not verified.

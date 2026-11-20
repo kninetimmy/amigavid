@@ -34,15 +34,23 @@ typedef LONG (WINAPI *nt_create_fn)(HANDLE *, ACCESS_MASK, struct nt_attributes 
                                     struct nt_status *, LARGE_INTEGER *, ULONG,
                                     ULONG, ULONG, ULONG, PVOID, ULONG);
 typedef LONG (WINAPI *nt_set_fn)(HANDLE, struct nt_status *, PVOID, ULONG, ULONG);
+typedef LONG (WINAPI *nt_query_dir_fn)(HANDLE, HANDLE, PVOID, PVOID, struct nt_status *,
+                                       PVOID, ULONG, ULONG, BOOLEAN, struct nt_name *, BOOLEAN);
+typedef LONG (WINAPI *nt_query_security_fn)(HANDLE, SECURITY_INFORMATION, PSECURITY_DESCRIPTOR,
+                                           ULONG, ULONG *);
 static nt_open_fn nt_open_file;
 static nt_create_fn nt_create_file;
 static nt_set_fn nt_set_file;
+static nt_query_dir_fn nt_query_dir;
+static nt_query_security_fn nt_query_security;
 
 #define NT_OPEN_CHECKED (0x200000 | 0x20) /* OPEN_REPARSE_POINT | SYNCHRONOUS_IO_NONALERT */
 #define NT_NAME_MISSING ((LONG)0xc0000034UL)
 #define NT_NAME_COLLISION ((LONG)0xc0000035UL)
+#define NT_BUFFER_TOO_SMALL ((LONG)0xc0000023UL)
 #define NT_RENAME 10                     /* FileRenameInformation */
 #define NT_DISPOSITION 13                /* FileDispositionInformation */
+#define NT_ID_BOTH_DIR 37                /* FileIdBothDirectoryInformation */
 
 static void close_to(unsigned keep)
 {
@@ -199,6 +207,8 @@ const char *local_init(const char *argument)
         nt_open_file = ntdll ? (nt_open_fn)GetProcAddress(ntdll, "NtOpenFile") : NULL;
         nt_create_file = ntdll ? (nt_create_fn)GetProcAddress(ntdll, "NtCreateFile") : NULL;
         nt_set_file = ntdll ? (nt_set_fn)GetProcAddress(ntdll, "NtSetInformationFile") : NULL;
+        nt_query_dir = ntdll ? (nt_query_dir_fn)GetProcAddress(ntdll, "NtQueryDirectoryFile") : NULL;
+        nt_query_security = ntdll ? (nt_query_security_fn)GetProcAddress(ntdll, "NtQuerySecurityObject") : NULL;
         if (!nt_open_file || !hold_root(drive) || !hold_path(&next, '\\')) {
             local_close();
             return "Cannot pin an ordinary workspace folder (links are not supported).";
@@ -313,6 +323,106 @@ static const char backup_retained[] =
 static const char recovery[] = "Save failed. Previous project is recoverable as .bak.";
 static const char exists[] = "That filename exists. Open that project to replace it, or use a new name.";
 static const char bad_destination[] = "Save destination is not an ordinary writable file.";
+static const char bad_name[] = "Cannot verify the project filename. Open it by its full name to replace it.";
+static const char bad_security[] = "Cannot preserve the previous project's access permissions. Use a new name.";
+
+static unsigned fold_ascii(unsigned ch)
+{
+    return ch >= 'A' && ch <= 'Z' ? ch + ('a' - 'A') : ch;
+}
+
+/* Reopen the held directory itself for a fresh, exact search expression.
+   Match the long name of the already-open file, not its optional 8.3 name. */
+static int named_nt(HANDLE prior, const char *leaf)
+{
+    struct nt_dir_entry {
+        ULONG next, index;
+        LARGE_INTEGER times_and_sizes[6];
+        ULONG attributes, bytes, ea_size;
+        CCHAR short_bytes;
+        WCHAR short_name[12];
+        LARGE_INTEGER id;
+        WCHAR text[MAX_PATH];
+    } entry;
+    BY_HANDLE_FILE_INFORMATION info;
+    struct nt_attributes attrs = { 0 };
+    struct nt_name name;
+    struct nt_status io;
+    WCHAR wide[VC_NAME];
+    HANDLE dir;
+    LONG status;
+    unsigned n;
+
+    nt_name_at(&attrs, &name, held[depth - 1], wide, 0);
+    if (!nt_query_dir || !GetFileInformationByHandle(prior, &info) ||
+        nt_open_file(&dir, FILE_LIST_DIRECTORY | SYNCHRONIZE,
+                                      &attrs, &io, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                      NT_OPEN_CHECKED | 1) != 0) /* DIRECTORY_FILE */
+        return 0;
+    for (n = 0; leaf[n]; ++n)
+        wide[n] = (unsigned char)leaf[n];
+    name.length = name.capacity = (USHORT)(n * sizeof(WCHAR));
+    status = nt_query_dir(dir, NULL, NULL, NULL, &io, &entry, sizeof(entry),
+                          NT_ID_BOTH_DIR, TRUE, &name, TRUE);
+    CloseHandle(dir);
+    if (status != 0 || io.information < offsetof(struct nt_dir_entry, text) + name.length ||
+        entry.id.LowPart != info.nFileIndexLow || (DWORD)entry.id.HighPart != info.nFileIndexHigh ||
+        entry.bytes != name.length)
+        return 0;
+    for (n = 0; leaf[n]; ++n)
+        if (fold_ascii(entry.text[n]) != fold_ascii((unsigned char)leaf[n]))
+            return 0;
+    return 1;
+}
+
+static int named_fat(const char *path, const char *leaf)
+{
+    WIN32_FIND_DATAA entry;
+    HANDLE search = FindFirstFileA(path, &entry);
+    unsigned n;
+
+    if (search == INVALID_HANDLE_VALUE)
+        return 0;
+    FindClose(search);
+    for (n = 0; leaf[n]; ++n)
+        if (fold_ascii((unsigned char)entry.cFileName[n]) != fold_ascii((unsigned char)leaf[n]))
+            return 0;
+    return entry.cFileName[n] == 0;
+}
+
+static void *read_security(HANDLE file, ULONG *size)
+{
+    SECURITY_INFORMATION fields = OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION |
+                                  DACL_SECURITY_INFORMATION;
+    DWORD version = GetVersion();
+    void *result;
+    ULONG actual;
+
+    /* Vista and later also enforce an integrity label (XP does not). */
+    if (LOBYTE(version) >= 6)
+        fields |= 0x10; /* LABEL_SECURITY_INFORMATION */
+    if (LOBYTE(version) > 6 || (LOBYTE(version) == 6 && HIBYTE(version) >= 2))
+        fields |= 0x20 | 0x40; /* ATTRIBUTE_SECURITY_INFORMATION | SCOPE_SECURITY_INFORMATION */
+    if (!nt_query_security || nt_query_security(file, fields, NULL, 0, size) != NT_BUFFER_TOO_SMALL ||
+        !*size || !(result = calloc(1, *size)))
+        return NULL;
+    if (nt_query_security(file, fields, result, *size, &actual) != 0 || actual != *size) {
+        free(result);
+        return NULL;
+    }
+    return result;
+}
+
+static int same_security(HANDLE prior, HANDLE staged)
+{
+    ULONG old_size, new_size;
+    void *old = read_security(prior, &old_size), *fresh = read_security(staged, &new_size);
+    int same = old && fresh && old_size == new_size && !memcmp(old, fresh, old_size);
+
+    free(old);
+    free(fresh);
+    return same;
+}
 
 static int write_staged(HANDLE file, const char *data, DWORD size)
 {
@@ -345,9 +455,12 @@ static const char *save_nt(const char *leaf, const char *data, DWORD size, int r
     } else if (status != 0) {
         return replace ? "Cannot back up previous project; it was not replaced." :
                          "Cannot check save destination.";
-    } else if (!replace || !ordinary(prior, 0, FILE_ATTRIBUTE_READONLY)) {
+    } else if (!replace || !ordinary(prior, 0, FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_ENCRYPTED)) {
         CloseHandle(prior);
         return replace ? bad_destination : exists;
+    } else if (!named_nt(prior, leaf)) {
+        CloseHandle(prior);
+        return bad_name;
     }
 
     for (i = 0; i < 100; ++i) {
@@ -359,7 +472,11 @@ static const char *save_nt(const char *leaf, const char *data, DWORD size, int r
     if (status != 0) {
         error = "Cannot create a new staging file.";
     } else {
-        if (!write_staged(staged, data, size)) {
+        /* Do not put any project bytes into a differently protected file.
+           Be conservative: we do not try to translate or copy custom ACLs. */
+        if (prior != INVALID_HANDLE_VALUE && !same_security(prior, staged)) {
+            error = bad_security;
+        } else if (!write_staged(staged, data, size)) {
             error = "Cannot write and flush staged project; previous file was not moved.";
         } else if (prior != INVALID_HANDLE_VALUE && rename_nt(prior, backup) != 0) {
             error = "Cannot back up previous project; it was not replaced.";
@@ -407,6 +524,8 @@ static const char *save_fat(const char *leaf, const char *data, DWORD size, int 
             return exists;
         if (attr & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_READONLY))
             return bad_destination;
+        if (!named_fat(path, leaf))
+            return bad_name;
         error = open_read(leaf, &file);
         if (error)
             return error;

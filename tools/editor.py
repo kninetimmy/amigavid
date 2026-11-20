@@ -1,6 +1,7 @@
 """Build and exercise the native M3 editor (no original files shipped)."""
 
 import argparse
+import csv
 import os
 from pathlib import Path
 import re
@@ -153,9 +154,26 @@ def test():
         pinned.mkdir()
         alternate.mkdir()
         (alternate / "test.vid").write_bytes(b"untouched outside the pinned workspace")
-        run(local_driver, pinned, alternate, cwd=work, env=None)
+        private = pinned / "private.vid"
+        private.write_bytes(b"old")
+        system = Path(os.environ["SystemRoot"]) / "System32"
+        icacls = system / "icacls.exe"
+        account = run(system / "whoami.exe", "/user", "/fo", "csv", "/nh", cwd=work, env=None)
+        sid = next(csv.reader(account.strip().splitlines()))[1]
+        run(icacls, private, "/grant:r", f"*{sid}:F", cwd=work, env=None)
+        run(icacls, private, "/inheritance:r", cwd=work, env=None)
+        acl_before = run(icacls, private, cwd=work, env=None)
+        ordinary = pinned / "Long Project File.vid"
+        ordinary.write_bytes(b"old")
+        inherited = run(icacls, ordinary, cwd=work, env=None)
+        print(run(local_driver, pinned, alternate, cwd=work, env=None), end="")
+        require(run(icacls, private, cwd=work, env=None) == acl_before,
+                "refusal changed the private project's DACL")
+        require(run(icacls, ordinary, cwd=work, env=None) == inherited,
+                "ordinary replacement changed the project's DACL")
         require({p.name: p.read_bytes() for p in pinned.iterdir()} ==
-                {"test.vid.bak": b"old", "warning.vid": b"new", "warning.vid.bak": b"old"},
+                {"test.vid.bak": b"old", "warning.vid": b"new", "warning.vid.bak": b"old",
+                 private.name: b"old", ordinary.name: b"new", "LIT~1.VID": b"new"},
                 "wrong pinned files after controlled failures (including staging cleanup)")
         require({p.name: p.read_bytes() for p in alternate.iterdir()} ==
                 {"test.vid": b"untouched outside the pinned workspace"},

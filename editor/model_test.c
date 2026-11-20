@@ -14,7 +14,7 @@ static void placement_checks(void)
 
     cut.effect = VC_CUT;
     cut.screen = slide.screen = VC_FIRST_SCREEN;
-    for (effect = VC_SLIDE; effect <= VC_SLIDE_OFF_DOWN; ++effect) {
+    for (effect = VC_SLIDE; effect <= VC_REVEAL_DOWN; ++effect) {
         for (a = 1; a <= 255; a += 254) {
             vc_init(&project);
             assert(vc_place(&project, 0, &cut));
@@ -29,10 +29,14 @@ static void placement_checks(void)
             assert(!vc_place(&project, 1, &invalid));
             invalid.a = 256;
             assert(!vc_place(&project, 1, &invalid));
+            invalid.a = 65535;
+            assert(!vc_place(&project, 1, &invalid));
             invalid = slide;
             invalid.tick = 0;
             assert(!vc_place(&project, 1, &invalid));
             invalid.tick = VC_TICK_MAX;
+            assert(!vc_place(&project, 1, &invalid));
+            invalid.tick = VC_TICK_MAX + 1;
             assert(!vc_place(&project, 1, &invalid));
             invalid = cut;
             invalid.tick = 50;
@@ -40,7 +44,7 @@ static void placement_checks(void)
             invalid = slide;
             invalid.effect = 0;
             assert(!vc_place(&project, 1, &invalid));
-            invalid.effect = 6;
+            invalid.effect = 10;
             assert(!vc_place(&project, 1, &invalid));
             invalid.effect = 900;
             assert(!vc_place(&project, 1, &invalid));
@@ -48,6 +52,10 @@ static void placement_checks(void)
             invalid = cut;
             invalid.tick = 50 + vc_length(&slide);
             assert(vc_place(&project, 2, &invalid));
+            invalid.tick = 49;
+            assert(vc_place(&project, 3, &invalid));
+            slide.tick = VC_TICK_MAX + 1 - vc_length(&slide);
+            assert(vc_place(&project, 2, &slide));
         }
     }
 }

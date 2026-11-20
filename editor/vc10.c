@@ -85,7 +85,7 @@ int vc_place(struct vc_project *project, unsigned index, const struct vc_cue *cu
     unsigned long end;
 
     if (index > n || (index == n && n == VC_CUES) || cue->tick > VC_TICK_MAX ||
-        (cue->effect < VC_CUT || cue->effect > VC_SLIDE_OFF_DOWN) ||
+        (cue->effect < VC_CUT || cue->effect > VC_REVEAL_DOWN) ||
         (cue->effect != VC_CUT && (!cue->a || cue->a > 255)))
         return 0;
     end = cue->tick + vc_length(cue);
@@ -230,7 +230,7 @@ const char *vc_read(struct vc_project *project, const char *data, size_t size)
         return "Invalid or empty cue list.";
     for (i = 0; i < count; ++i) {
         if (!number(&reader, VC_TICK_MAX, &cue.tick) ||
-            !word(&reader, VC_SLIDE_OFF_DOWN, &cue.effect) || !cue.effect ||
+            !word(&reader, VC_REVEAL_DOWN, &cue.effect) || !cue.effect ||
             !word(&reader, project->screens + VC_FIRST_SCREEN - 1, &cue.screen) ||
             cue.screen < VC_FIRST_SCREEN ||
             !word(&reader, 65535, &cue.a) || !word(&reader, 65535, &cue.b) ||
@@ -293,13 +293,14 @@ struct vc_frame vc_at(const struct vc_project *project, unsigned long tick)
 
     for (i = 0; i < project->cues && project->cue[i].tick <= tick; ++i) {
         cue = &project->cue[i];
-        /* At a=1 DoDisplay calls End before Func can swap the screens.
-           SlideOffDownEnd only removes screen 2, leaving the old base. */
-        if (cue->effect == VC_SLIDE_OFF_DOWN && cue->a == 1)
+        /* These downward Ends leave the old base when a=1 reaches End
+           before the first Func can swap the screens. */
+        if ((cue->effect == VC_SLIDE_OFF_DOWN || cue->effect == VC_SCROLL_DOWN ||
+             cue->effect == VC_REVEAL_DOWN) && cue->a == 1)
             continue;
         if (cue->effect != VC_CUT && tick - cue->tick < 128) {
             step = (256 + (2 * cue->a - 1) - 1) / (2 * cue->a - 1);
-            /* Startup Bodge2 consumes field 0, so tick-zero slides start at
+            /* Startup Bodge2 consumes field 0, so tick-zero transitions start at
                field 1. Later cues still start at 2*Time. DoDisplay steps
                before rendering; sample after both fields of this tick. */
             distance = (2 * (tick - cue->tick) + 2 - (cue->tick == 0)) * step;
@@ -322,6 +323,24 @@ struct vc_frame vc_at(const struct vc_project *project, unsigned long tick)
                     frame.bottom = frame.top;
                     frame.top = cue->screen;
                     frame.split = (unsigned)distance;
+                    break;
+                case VC_SCROLL_UP:
+                    frame.top_row = 256 - frame.split;
+                    break;
+                case VC_SCROLL_DOWN:
+                    frame.bottom = frame.top;
+                    frame.top = cue->screen;
+                    frame.split = (unsigned)distance;
+                    frame.top_row = 256 - frame.split;
+                    break;
+                case VC_REVEAL_UP:
+                    frame.bottom_row = frame.split;
+                    break;
+                case VC_REVEAL_DOWN:
+                    frame.bottom = frame.top;
+                    frame.top = cue->screen;
+                    frame.split = (unsigned)distance;
+                    frame.bottom_row = frame.split;
                     break;
                 }
                 return frame;

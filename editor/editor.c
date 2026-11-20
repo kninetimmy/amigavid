@@ -9,16 +9,17 @@
 #define TITLE "AmigaVid VCEDIT"
 #define CLASS "AmigaVidEditor"
 #define WIDTH 592
-#define HEIGHT 384
+#define HEIGHT 438
 #define GRID_X 16
-#define GRID_Y 316
+#define GRID_Y 370
 #define GRID_W 552
-#define GRID_BOTTOM 365
+#define GRID_BOTTOM 419
 
 enum {
     ADD_PICTURE = 100, OPEN_PROJECT, SAVE_PROJECT, ADD_CUT, ADD_SLIDE,
     PLAY, STOP, SEEK, PICTURES, NAME, DURATION, TICK,
-    ADD_SLIDE_ON_DOWN, ADD_SLIDE_OFF_UP, ADD_SLIDE_OFF_DOWN
+    ADD_SLIDE_ON_DOWN, ADD_SLIDE_OFF_UP, ADD_SLIDE_OFF_DOWN,
+    ADD_SCROLL_UP, ADD_SCROLL_DOWN, ADD_REVEAL_UP, ADD_REVEAL_DOWN
 };
 
 static struct document {
@@ -51,6 +52,10 @@ static const char *effect_name(unsigned effect)
     case VC_SLIDE_ON_DOWN: return "Slide On Down";
     case VC_SLIDE_OFF_UP: return "Slide Off Up";
     case VC_SLIDE_OFF_DOWN: return "Slide Off Down";
+    case VC_SCROLL_UP: return "Scroll Up";
+    case VC_SCROLL_DOWN: return "Scroll Down";
+    case VC_REVEAL_UP: return "Reveal Up";
+    case VC_REVEAL_DOWN: return "Reveal Down";
     }
     return "Unsupported";
 }
@@ -410,7 +415,7 @@ static void add_cue(unsigned effect)
 {
     struct vc_cue cue = { 0 };
     struct vc_project *p = &doc->project;
-    BOOL ok;
+    char text[4];
     LRESULT choice = SendMessageA(pictures, CB_GETCURSEL, 0, 0);
 
     if (choice == CB_ERR) {
@@ -420,9 +425,11 @@ static void add_cue(unsigned effect)
     cue.screen = (unsigned)choice + VC_FIRST_SCREEN;
     cue.effect = effect;
     if (effect != VC_CUT) {
-        cue.a = GetDlgItemInt(window, DURATION, &ok, FALSE);
-        if (!ok || !cue.a || cue.a > 255) {
-            error("Enter a Slide duration of 1 to 255 ticks.");
+        if (GetWindowTextLengthA(duration) >= sizeof(text) ||
+            !GetWindowTextA(duration, text, sizeof(text)) ||
+            strspn(text, "0123456789") != strlen(text) ||
+            !(cue.a = (unsigned)atoi(text)) || cue.a > 255) {
+            error("Enter an effect duration of 1 to 255 ticks.");
             return;
         }
     }
@@ -444,7 +451,7 @@ static void text_at(HDC dc, int x, int y, const char *text)
 
 static void draw_timeline(HDC dc)
 {
-    RECT area = { 0, 269, WIDTH, HEIGHT };
+    RECT area = { 0, 323, WIDTH, HEIGHT };
     RECT marker;
     const struct vc_cue *cue;
     unsigned i;
@@ -455,7 +462,7 @@ static void draw_timeline(HDC dc)
     SetBkMode(dc, TRANSPARENT);
     wsprintfA(label, "Tick %lu   |   25 ticks/sec   |   %u cues   |   Drag markers; click track to seek",
               tick, doc->project.cues);
-    text_at(dc, GRID_X, 284, label);
+    text_at(dc, GRID_X, 338, label);
     MoveToEx(dc, GRID_X, GRID_Y, NULL);
     LineTo(dc, GRID_X + GRID_W, GRID_Y);
     for (i = 0; i < doc->project.cues; ++i) {
@@ -493,6 +500,10 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case ADD_SLIDE_ON_DOWN: stop(); add_cue(VC_SLIDE_ON_DOWN); return 0;
         case ADD_SLIDE_OFF_UP: stop(); add_cue(VC_SLIDE_OFF_UP); return 0;
         case ADD_SLIDE_OFF_DOWN: stop(); add_cue(VC_SLIDE_OFF_DOWN); return 0;
+        case ADD_SCROLL_UP: stop(); add_cue(VC_SCROLL_UP); return 0;
+        case ADD_SCROLL_DOWN: stop(); add_cue(VC_SCROLL_DOWN); return 0;
+        case ADD_REVEAL_UP: stop(); add_cue(VC_REVEAL_UP); return 0;
+        case ADD_REVEAL_DOWN: stop(); add_cue(VC_REVEAL_DOWN); return 0;
         case PLAY:
             if (!doc->project.cues)
                 return 0;
@@ -731,20 +742,27 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
         !control("BUTTON", "Add Slide O&ff Up", WS_TABSTOP, 464, 157, 118, 23, ADD_SLIDE_OFF_UP) ||
         !control("BUTTON", "Add Slide Off Do&wn", WS_TABSTOP, 332, 184, 118, 23, ADD_SLIDE_OFF_DOWN) ||
         !control("STATIC", "Ticks", 0, 464, 187, 42, 18, 0) ||
-        !(duration = control("EDIT", "25", WS_BORDER | WS_TABSTOP | ES_NUMBER,
+        /* A single-line EDIT can discard everything after a pasted line break. */
+        !(duration = control("EDIT", "25", WS_BORDER | WS_TABSTOP | ES_NUMBER |
+                             ES_MULTILINE | ES_AUTOHSCROLL | ES_AUTOVSCROLL,
                              510, 184, 72, 22, DURATION)) ||
-        !control("BUTTON", "&Play", WS_TABSTOP, 332, 211, 65, 23, PLAY) ||
-        !control("BUTTON", "S&top", WS_TABSTOP, 401, 211, 65, 23, STOP) ||
+        !control("BUTTON", "Add Sc&roll Up", WS_TABSTOP, 332, 211, 118, 23, ADD_SCROLL_UP) ||
+        !control("BUTTON", "Add Scroll Dow&n", WS_TABSTOP, 464, 211, 118, 23, ADD_SCROLL_DOWN) ||
+        !control("BUTTON", "Add Re&veal Up", WS_TABSTOP, 332, 238, 118, 23, ADD_REVEAL_UP) ||
+        !control("BUTTON", "Add Revea&l Down", WS_TABSTOP, 464, 238, 118, 23, ADD_REVEAL_DOWN) ||
+        !control("BUTTON", "&Play", WS_TABSTOP, 332, 265, 65, 23, PLAY) ||
+        !control("BUTTON", "S&top", WS_TABSTOP, 401, 265, 65, 23, STOP) ||
         !(position = control("EDIT", "0", WS_BORDER | WS_TABSTOP | ES_NUMBER,
-                             475, 211, 54, 22, TICK)) ||
-        !control("BUTTON", "&Seek", WS_TABSTOP, 533, 211, 49, 23, SEEK) ||
+                             475, 265, 54, 22, TICK)) ||
+        !control("BUTTON", "&Seek", WS_TABSTOP, 533, 265, 49, 23, SEEK) ||
         !(status = control("STATIC", "Enter a filename from the workspace.", 0,
-                           332, 242, 250, 27, 0))) {
+                           332, 296, 250, 27, 0))) {
         error("Cannot initialize editor controls.");
         goto done;
     }
     SendMessageA(files, EM_LIMITTEXT, MAX_PATH - 1, 0);
-    SendMessageA(duration, EM_LIMITTEXT, 3, 0);
+    /* Keep invalid input, not a truncated valid prefix, for add_cue to reject. */
+    SendMessageA(duration, EM_LIMITTEXT, 0, 0);
     SendMessageA(position, EM_LIMITTEXT, 5, 0);
     refresh();
     ShowWindow(window, show);

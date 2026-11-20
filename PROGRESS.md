@@ -1175,6 +1175,298 @@ the refusal; probe, archive, viewer and release instructions still apply.
   were copied or published. Scroll/Reveal remains the next candidate batch,
   subject to separate approval.
 
+## Milestone 4 batch 2 — Scroll and Reveal (issue #42)
+
+### Source and fidelity
+
+- Reverified primary `inputs/vc.zip` against SHA-256
+  `ef4622f337e4e6331fdc97d5da6ec54d35f0d39bcd28ab898ce3689b8fb36ee3`
+  before reading the reference. `vc/veffects.h:22–25` assigns Scroll
+  Up/Down IDs 6/7 and Reveal Up/Down IDs 8/9.
+  `vc/neweffects.c:93–153,1114–1144,1223–1251,1935–1938` supplies the shared
+  1–255 duration control, default 25, zero other defaults, screen object
+  class, start/stop placement and the same field step and reserved length
+  as the four slides. The active VC10 grammar is unchanged.
+- `vc/fx.c:358–392,610–731` supplies the four Init/Func/End contracts.
+  `videocreator.asm::CopLoopNoSquash` switches pictures at `Start2`;
+  `buildscreen` applies the corresponding `SkipLines`. For an active
+  frame, `m` is the total stepped rows, with `m < 255`:
+
+  | Effect | Split row | Top picture / first source row | Bottom picture / first source row |
+  | --- | --- | --- | --- |
+  | Scroll Up (6) | `255-m` | outgoing / `m+1` | incoming / 0 |
+  | Scroll Down (7) | `m` | incoming / `256-m` | outgoing / 0 |
+  | Reveal Up (8) | `255-m` | outgoing / 0 | incoming / `255-m` |
+  | Reveal Down (9) | `m` | incoming / 0 | outgoing / `m` |
+
+- The existing shared timing path remains: field step
+  `ceil(256/(2*a-1))`, update before Func/End, and one initial update at
+  tick 0 because `mainloop.c:489–516,556–595` dispatches startup `Bodge2`
+  first. A first cue at tick 1 and later cues receive two updates per
+  tick. Seek samples after both logical fields. At duration 25, a later
+  cue steps 12/132/252 rows at relative ticks 0/10/20 and settles at 21;
+  a tick-zero cue steps 6/126/246 and also settles at 21.
+- At duration 1, Scroll Down and Reveal Down reach End before their
+  first Func can swap pictures; like Slide Off Down, they retain the
+  outgoing picture, including startup black. Their End resets the row
+  offset and removes the second region. The other new effects select
+  the target. Held output becomes the base of the following cue.
+- These are independently implemented, source-derived logical picture
+  expectations, not original-Amiga captures. The existing independently
+  generated row cards distinguish all 256 rows and both pictures.
+  Chipset scanout, copper buffering, depth-dependent blank-line/palette
+  tricks, physical field timing and timer jitter remain unqualified.
+  Paired screens still preview only their first member.
+- Four named buttons reuse the selected-picture and duration workflow;
+  two extra rows extend the client height from 384 to 438 pixels without
+  changing the preview size or horizontal timeline mapping.
+
+### Host verification — 2026-11-20
+
+- All four required local commands **passed (exit 0)**, not run by CI:
+  `python tools/editor.py test`, `python tools/editor.py build`,
+  `python tools/editor.py smoke` and
+  `python -m unittest discover -s tools -p test_play_capture.py`
+  (**3 tests**). Host: Windows 11 Pro x64 `26300.9974`, NTFS,
+  Python 3.14.4 and GCC 16.1.0.
+- Build: verified Open Watcom `2026-11-01-Build`, x86 PE32 GUI 4.0,
+  static WinMain, direct GDI32/KERNEL32/USER32 imports only, no delay
+  imports. The checkout had no Watcom cache; `python tools/probe.py
+  bootstrap` downloaded and verified the pinned official asset before use.
+  `python tools/asset.py prepare F:\AmigaVid\inputs\vc.zip` verified the
+  archive and prepared only the two local smoke fixtures.
+  Final `VCEDIT.EXE` SHA-256:
+  `4ccbb0be9d544bef909f429e6b18bcd51d3b0b259805552f31b1384ccb56cf76`.
+- Model checks cover IDs 2–9 at durations 1/2/19/25/65/255, exact LF/CRLF
+  round-trips to canonical LF with nondefault metadata, target, `a`–`e`
+  and shifted text, independent split/source-row expectations, first cues
+  at ticks 0/1, completion, held output and following Cut/Slide cues.
+  Placement failures for invalid durations, unsupported IDs, overlaps
+  and timeline bounds leave a byte-identical project; adjacent cues on
+  both sides and a cue ending at the timeline limit succeed. The 27
+  malformed/unsafe cases and existing native NT save/fault checks pass.
+- Native smoke passes **72 first-transition cases** (the existing 24
+  slides at tick 0 plus 48 new-effect cases at ticks 0 and 1) and
+  **48 Cut-then-transition cases**, all at the six durations above.
+  Each authors through the native buttons, checks exact saved VC10 bytes,
+  quits, reopens and compares every one of 81,920 painted pixels per
+  sampled frame using independent row-card slices. Backward Seek,
+  clock-paced Play and ordinary timer-driven completion agree, including
+  direction-sensitive intermediate rows and duration-1 downward retention.
+  Eight additional sequences place a following Slide immediately adjacent
+  to each new effect at duration 1 or 25 and check its Seek/Play output and
+  saved fields. Nondefault paired-target imports, default duration 25,
+  refused UI/import durations, unsupported IDs and conflicting imports/
+  drags preserve the document. Existing artwork, Cut, all slides, marker
+  gestures, containment and save/recovery checks also pass.
+- No timed Play sample needed a retry in the final smoke. The expanded
+  model test failed against the pre-implementation model (exit 1 at
+  `vc_place` for newly supported ID 6); `.editor/ISSUE42-test-before.txt`
+  retains that result. An initial smoke was deliberately stopped after
+  correcting a button mnemonic; only the rebuilt executable's complete
+  final smoke is used for the result above.
+- Local evidence in this issue worktree: `.editor/ISSUE42-build-final.txt`,
+  `ISSUE42-test-final.txt`, `ISSUE42-smoke-final.txt`,
+  `ISSUE42-unit-final.txt`, `PE-IMPORTS.txt` and `HOST-SMOKE.txt`.
+  Preserve these before removing the worktree. The full README was reviewed
+  and updated for all four effects; probe, archive, viewer, save protection
+  and release guidance remains applicable. Original code/artwork, binaries
+  and captures are not published.
+- This executable was exercised only on the modern host. Windows 98 FE/SE
+  and x86 XP RTM/SP3 editor qualification, physical target hardware,
+  original-Amiga reader/rendering comparison and editor-release acceptance
+  remain outstanding; earlier guest evidence predates these effects.
+
+### Whole-field duration review repair — 2026-11-20
+
+- The shared native duration read now requires one to three ASCII digits
+  representing 1–255 before placement. It checks the full control length
+  before copying. This does not prevent the native edit control's three-character
+  input limit from truncating a real paste before validation (see below).
+  Cut still ignores the duration field.
+- Native smoke sets each of `"2.5"`, `"2x"`, `" 2"`, `"+2"`, `"2 "`, empty,
+  `0`, `256`, `"255x"` and 100 digits in the actual Ticks control and confirms
+  the text was not truncated before submission. For each of IDs 2–9, a
+  placement with room to succeed must show the duration error and save
+  byte-identical project data after every refusal: **80 rejection checks**.
+- Red evidence: the expanded native check against the preserved `8ad81dd`
+  executable exited 1 at `invalid UI duration ' 2' changed saved bytes`.
+  The focused run skipped first-transition cases and kept duration 25 via
+  in-memory sample selection; no old executable or source was modified.
+  `"2.5"` and `"2x"` already refused on this host, so that specific decimal
+  failure was not reproduced. The old EXE, import report and smoke results
+  remain in `.editor/issue42-review1-old-8ad81dd/`; diagnostics are
+  `.editor/ISSUE42-REVIEW1-old-smoke.txt` and `-old-smoke-checked.txt`.
+- The adjacent following Slide now targets a visibly distinct card after
+  duration-1 Scroll Down and Reveal Down. Its Seek and timed Play comparisons
+  therefore detect a skipped following cue instead of accepting an unchanged
+  picture. All eight adjacent sequences retain exact saved-field checks.
+- All four required local commands **passed (exit 0)**, not run in CI:
+  `python tools/editor.py test`, `python tools/editor.py build`,
+  `python tools/editor.py smoke` and
+  `python -m unittest discover -s tools -p test_play_capture.py` (**3 tests**).
+  The full smoke retains all 120 author/reopen cases, eight adjacent
+  sequences and existing regression checks; no Play sample needed a retry.
+  Host: Windows 11 Pro x64 `26300.9974`, NTFS, Python 3.14.4, GCC 16.1.0.
+  The verified Watcom pin and PE/import profile above are unchanged.
+  Repaired `VCEDIT.EXE` SHA-256:
+  `ce053193ab0454d7f3f66e56bd357822437e9e328fb5b81115cc75e829dcaacb`.
+- Logs: `.editor/ISSUE42-REVIEW1-test.txt`, `-build.txt`, `-smoke.txt` and
+  `-unit.txt`, plus `.editor/HOST-SMOKE.txt` and `PE-IMPORTS.txt`.
+  The full README was reviewed again and remains accurate without changes.
+  Original code/artwork and generated artifacts remain private and ignored.
+  No Windows 98/XP guest, physical target or original-Amiga reader was run;
+  their qualification and editor-release acceptance remain outstanding.
+
+### Native paste review repair blocked — 2026-11-20
+
+- Review cycle 2 identifies a gap in the preceding evidence: smoke uses
+  `WM_SETTEXT`, which bypasses the edit limit. Its passing results do not
+  establish that a real paste of `1999` is refused rather than accepting
+  a truncated `199`. That behavior was not reproduced in this session.
+- On Windows 11 Pro x64 `26300.9974`, attempted an isolated window station
+  before any clipboard operation. `CreateWindowStationW` with a unique name
+  returned `WinError 5` (access denied); named creation requires administrator
+  rights. The documented unnamed form with `CWF_CREATE_ONLY` returned
+  `WinError 183` (already exists). Reusing that existing station would not
+  establish an isolated clipboard, so the check stopped. No clipboard was
+  read, emptied, overwritten or logged; no editor paste or saved-byte
+  comparison ran. No elevation or destructive clipboard fallback was used.
+- Preserved the pre-fix `10c4d2413701383f449fa5dd25c6c9fe73d2f2c1` executable,
+  import report and earlier smoke log in
+  `.editor/issue42-review2-old-10c4d24/`, plus the unfinished, unexecuted-worker
+  harness sources as `attempted-editor_smoke.py` and `attempted-editor.py`.
+  EXE SHA-256 remains
+  `ce053193ab0454d7f3f66e56bd357822437e9e328fb5b81115cc75e829dcaacb`.
+  Isolation failures (both exit 1) are recorded in
+  `.editor/ISSUE42-REVIEW2-old-paste.txt` and
+  `ISSUE42-REVIEW2-old-paste-isolated.txt`. These are local-only artifacts.
+- Removed the unfinished harness from tracked changes; no runtime repair was
+  made. The four required checks were not rerun: there is no repaired source
+  to verify, and the existing smoke does not exercise native paste. Criterion
+  3 remains unsatisfied. The Architect must provide a safely isolated native
+  paste environment before reproduction, repair and all four checks resume.
+- Reviewed the full README; its commands, effect documentation and explicit
+  host/guest qualification limits remain current. No original code/artwork
+  was published. Windows 98/XP, physical-target, original-reader and release
+  qualification remain outstanding.
+
+### Native paste limit repair
+
+- **2026-11-20, block 1 resolved:** the Architect supplied a disposable
+  offline XP SP3 overlay. The Ticks edit now uses `EM_LIMITTEXT(0)` and
+  `ES_AUTOHSCROLL`, rather than a short input or visible-width cap. Overlong
+  input, including selection replacements, remains invalid for the existing
+  whole-field validation. Cut, the 1–255 range and default 25 are unchanged.
+- **Observed red:** the preserved `10c4d24` executable
+  (`ce053193ab0454d7f3f66e56bd357822437e9e328fb5b81115cc75e829dcaacb`)
+  received real `WM_PASTE` inside XP SP3. `1999` became `199`, including
+  replacement/insertion within existing text; 100 digits became `222`.
+  Each invalid prefix was accepted at tick 25 after a Cut at 0, changing an
+  independently encoded 88-byte project to 116 bytes. The completed driver
+  reported **40 failures / 104 cases, exit 1**, across IDs 2–9. Leading-space
+  ` 2` and decimal `2.5` were rejected on this guest; valid pastes passed.
+- **Observed green:** the same guest driver on the repaired executable
+  reported **0 failures / 104 cases, exit 0**: 72 refusals left exact baseline
+  bytes unchanged; 32 valid pastes (1/25/255 and selection replacement to
+  255) authored exact expected cues. `1999` and all 100 digits remained in
+  the field rather than becoming valid prefixes. An independent host reader
+  rechecked all 104 captured saved projects and the old accepted-199 save.
+  `python tools/editor.py paste_test` builds this optional guest-only driver;
+  neither it nor the ordinary host checks access the host clipboard.
+- Guest: Windows XP Professional SP3 x86 `5.1.2600`, QEMU TCG Pentium III,
+  256 MiB, standard VGA (640×480 captures). The supplied writable overlay is
+  `C:\Users\Kninetimmy\AppData\Local\Temp\opencode\issue42-xp-8rnd2dof\paste-test.qcow2`.
+  Each boot used a fresh private AF_UNIX QMP socket, no display frontend,
+  NIC, clipboard sharing or guest agent, and only a dedicated disposable
+  FAT16 transfer disk. Both backing files' SHA-256 values remained unchanged;
+  the powered-off overlay passed `qemu-img check`. No other VM was controlled.
+- Private evidence: `.editor/issue42-xp-paste-20261120/` holds `final-results/`
+  (`OLD.LOG` red, `NEW.LOG` green, exit codes and saved projects), the final
+  driver/source/import hashes, QMP commands, backing hashes, transfer disks
+  and `comparison.json`. `old3-results/` and `green-results/` retain earlier
+  completed runs; the final run uses the committed driver's fixed filename
+  pairs and workspace-length guard. `old-results/` and `old2-results/`
+  preserve preliminary harness runs with dialog-dismissal races; they are
+  not the completed 104-case result. The supplied overlay retains guest
+  workspaces. Preserve these ignored artifacts before removing the worktree.
+- All four required local checks **passed (exit 0)**, not run by CI:
+  `python tools/editor.py test`, `python tools/editor.py build`,
+  `python tools/editor.py smoke` and
+  `python -m unittest discover -s tools -p test_play_capture.py` (**3 tests**).
+  Full smoke retained all 120 author/reopen cases, eight adjacent sequences
+  and prior regressions. Native selection replacement and character messages
+  now cover 112 duration refusals with unchanged saved bytes, plus eight
+  valid replacements to 255 with exact saved cues, without any clipboard API.
+  No timed Play sample needed a retry.
+  The first smoke invocation hit its outer 120-second timeout (exit 143),
+  not a reported assertion failure; its log is retained separately.
+  Repaired `VCEDIT.EXE` SHA-256:
+  `eb3c2d8302e1d560d2fc16082260c212816f65def497e5d3f30632f0d413fc78`.
+  Host: Windows 11 Pro x64 `26300.9974`, Python 3.14.4, GCC 16.1.0; the
+  verified Watcom `2026-11-01-Build` pin and PE/import profile are unchanged.
+- Command logs are `.editor/ISSUE42-REVIEW2-test.txt`, `-build.txt`,
+  `-smoke.txt`, `-unit.txt`, `-paste-build-final.txt`,
+  `-guest-verify-final.txt` and `-overlay-check.txt`; `.editor/HOST-SMOKE.txt`
+  and `PE-IMPORTS.txt` hold the complete native/build results.
+- Reviewed the full README and documented the optional guest-only test,
+  distinguishing focused XP paste evidence from full guest qualification.
+  This does not qualify guest preview, playback timing, layout, Windows 98,
+  physical hardware, the original Amiga reader or an editor release. No
+  original source, artwork, executable, disk or capture is published.
+
+### Native multiline paste repair
+
+- **2026-11-20, issue #42 criterion 3:** real `WM_PASTE` on the isolated XP
+  SP3 guest confirmed the review hypothesis on `317b0f2`. With an eligible
+  cue at tick 25 after a Cut, replacing `7` with `25\r\n256` kept `25`;
+  replacing the last two digits of `125` with `2\r\n256` kept `12`. Both
+  appended a cue, changing the exact 88-byte baseline to 115 bytes. Bare CR
+  and trailing CRLF also admitted prefixes; bare LF was already refused on
+  this guest. The driver exited **1: 40 failures / 160 cases** across IDs 2–9.
+- **Repaired:** Ticks uses a stock multiline EDIT in the same bounds, with
+  horizontal and vertical auto-scrolling so neither a line break nor the
+  visible size can clip a paste to a valid prefix. The existing whole-field
+  check still requires 1–255, default 25. No custom clipboard handler, new
+  API imports, timing or placement changes.
+- **Observed green:** the identical guest driver exited **0: 0 failures /
+  160 cases**. The 128 refusals left exact baseline bytes unchanged,
+  including whole-field and partial selection replacement with CRLF, LF
+  and CR, trailing CRLF, `1999` and the other single-line negatives. The 32
+  positives saved exact cues for 1/25/255 and a selection replacement to
+  255. An independent host reader reconstructed and compared all 320 red and
+  green projects. The driver built by `python tools/editor.py paste_test`
+  repeated the green result. The earlier 104-case evidence above is retained.
+- Same disposable Windows XP Professional SP3 x86 `5.1.2600` QEMU overlay
+  as above, using separate private QMP sockets and FAT16 transfers, without
+  NIC, clipboard sharing, host clipboard access or login secrets. Both
+  backing hashes stayed unchanged and `qemu-img check` found no overlay
+  errors. Private evidence: `.editor/issue42-xp-multiline-20261120/`
+  (`red/`, `green/` and `try2/` contain `final-results/PASTE.LOG`, `EXIT.TXT`
+  and the exact `.VID` files; `comparison.json` and `verify.py` independently
+  bind and check the saved bytes). `C613.VID` and `C614.VID` are the Scroll Up
+  full and partial CRLF replacement witnesses. Preserve these ignored
+  artifacts before removing the worktree.
+- Windows 11 Pro x64 `26300.9974`, Python 3.14.4, GCC 16.1.0. Open Watcom
+  `2026-11-01-Build`, x86 PE32 GUI 4.0, static CRT and identical direct
+  imports to the prior executable. Repaired `VCEDIT.EXE` SHA-256:
+  `b6a91e997f3a59f7b5032825e1bf2ab416c2b86545e9c41b8f0fd8059999bdf3`.
+- All four required local checks passed (exit 0): `python tools/editor.py
+  test`, `python tools/editor.py build`, `python tools/editor.py smoke`
+  and `python -m unittest discover -s tools -p test_play_capture.py`
+  (3 tests). The completed smoke covered 120 author/reopen cases, eight
+  adjacent sequences, 112 invalid duration refusals and eight valid
+  selection replacements. The first smoke command hit its 240-second
+  outer timeout (exit 143) without a reported assertion failure. Logs:
+  `.editor/ISSUE42-REVIEW3-test.txt`, `-build.txt`, `-smoke-complete.txt`,
+  `-unit.txt`; `-smoke.txt` is the interrupted run. `HOST-SMOKE.txt`
+  captures the completed smoke and `PE-IMPORTS.txt` details the build.
+- Reviewed the full README and updated the guest-only driver and duration
+  instructions. Focused XP paste checks do not qualify guest preview,
+  playback timing, 640×480 layout, Windows 98, physical hardware, the
+  original Amiga reader or an editor release. No original code or artwork,
+  guest disk or capture is published.
+
 ## Open blockers
 
 - The [five missing files](#recovered-and-missing-files) still need locating;
@@ -1197,9 +1489,9 @@ Before milestone 2, real-asset ILBM decoding and display was the next
 independent development step; the viewer now has host and four-guest
 evidence under #16's calibrated-output criterion. Before milestone 3,
 the next step was to edit, save, reopen and replay one sequence. The
-two-picture workflow is now implemented, followed by the vertical slide
-family above. The next candidate batch is Scroll Up/Down (6/7) and
-Reveal Up/Down (8/9), subject to separate approval; the rest of milestone 4
-and special screens remain outstanding. Obtain physical Windows 98 and XP
+two-picture workflow is now implemented, followed by the vertical slide,
+Scroll Up/Down (6/7) and Reveal Up/Down (8/9) families above. The rest of
+milestone 4 and special screens remain outstanding; choose the next small
+effect family through a separately approved plan. Obtain physical Windows 98 and XP
 [probe target-checklist](probe/TEST.TXT) results before claiming native
 hardware validation. Editor-release workflows remain unverified.

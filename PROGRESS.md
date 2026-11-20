@@ -1351,6 +1351,70 @@ the refusal; probe, archive, viewer and release instructions still apply.
   was published. Windows 98/XP, physical-target, original-reader and release
   qualification remain outstanding.
 
+### Native paste limit repair
+
+- **2026-11-20, block 1 resolved:** the Architect supplied a disposable
+  offline XP SP3 overlay. The Ticks edit now uses `EM_LIMITTEXT(0)` and
+  `ES_AUTOHSCROLL`, rather than a short input or visible-width cap. Overlong
+  input, including selection replacements, remains invalid for the existing
+  whole-field validation. Cut, the 1–255 range and default 25 are unchanged.
+- **Observed red:** the preserved `10c4d24` executable
+  (`ce053193ab0454d7f3f66e56bd357822437e9e328fb5b81115cc75e829dcaacb`)
+  received real `WM_PASTE` inside XP SP3. `1999` became `199`, including
+  replacement/insertion within existing text; 100 digits became `222`.
+  Each invalid prefix was accepted at tick 25 after a Cut at 0, changing an
+  independently encoded 88-byte project to 116 bytes. The completed driver
+  reported **40 failures / 104 cases, exit 1**, across IDs 2–9. Leading-space
+  ` 2` and decimal `2.5` were rejected on this guest; valid pastes passed.
+- **Observed green:** the same guest driver on the repaired executable
+  reported **0 failures / 104 cases, exit 0**: 72 refusals left exact baseline
+  bytes unchanged; 32 valid pastes (1/25/255 and selection replacement to
+  255) authored exact expected cues. `1999` and all 100 digits remained in
+  the field rather than becoming valid prefixes. An independent host reader
+  rechecked all 104 captured saved projects and the old accepted-199 save.
+  `python tools/editor.py paste_test` builds this optional guest-only driver;
+  neither it nor the ordinary host checks access the host clipboard.
+- Guest: Windows XP Professional SP3 x86 `5.1.2600`, QEMU TCG Pentium III,
+  256 MiB, standard VGA (640×480 captures). The supplied writable overlay is
+  `C:\Users\Kninetimmy\AppData\Local\Temp\opencode\issue42-xp-8rnd2dof\paste-test.qcow2`.
+  Each boot used a fresh private AF_UNIX QMP socket, no display frontend,
+  NIC, clipboard sharing or guest agent, and only a dedicated disposable
+  FAT16 transfer disk. Both backing files' SHA-256 values remained unchanged;
+  the powered-off overlay passed `qemu-img check`. No other VM was controlled.
+- Private evidence: `.editor/issue42-xp-paste-20261120/` holds `final-results/`
+  (`OLD.LOG` red, `NEW.LOG` green, exit codes and saved projects), the final
+  driver/source/import hashes, QMP commands, backing hashes, transfer disks
+  and `comparison.json`. `old3-results/` and `green-results/` retain earlier
+  completed runs; the final run uses the committed driver's fixed filename
+  pairs and workspace-length guard. `old-results/` and `old2-results/`
+  preserve preliminary harness runs with dialog-dismissal races; they are
+  not the completed 104-case result. The supplied overlay retains guest
+  workspaces. Preserve these ignored artifacts before removing the worktree.
+- All four required local checks **passed (exit 0)**, not run by CI:
+  `python tools/editor.py test`, `python tools/editor.py build`,
+  `python tools/editor.py smoke` and
+  `python -m unittest discover -s tools -p test_play_capture.py` (**3 tests**).
+  Full smoke retained all 120 author/reopen cases, eight adjacent sequences
+  and prior regressions. Native selection replacement and character messages
+  now cover 112 duration refusals with unchanged saved bytes, plus eight
+  valid replacements to 255 with exact saved cues, without any clipboard API.
+  No timed Play sample needed a retry.
+  The first smoke invocation hit its outer 120-second timeout (exit 143),
+  not a reported assertion failure; its log is retained separately.
+  Repaired `VCEDIT.EXE` SHA-256:
+  `eb3c2d8302e1d560d2fc16082260c212816f65def497e5d3f30632f0d413fc78`.
+  Host: Windows 11 Pro x64 `26300.9974`, Python 3.14.4, GCC 16.1.0; the
+  verified Watcom `2026-11-01-Build` pin and PE/import profile are unchanged.
+- Command logs are `.editor/ISSUE42-REVIEW2-test.txt`, `-build.txt`,
+  `-smoke.txt`, `-unit.txt`, `-paste-build-final.txt`,
+  `-guest-verify-final.txt` and `-overlay-check.txt`; `.editor/HOST-SMOKE.txt`
+  and `PE-IMPORTS.txt` hold the complete native/build results.
+- Reviewed the full README and documented the optional guest-only test,
+  distinguishing focused XP paste evidence from full guest qualification.
+  This does not qualify guest preview, playback timing, layout, Windows 98,
+  physical hardware, the original Amiga reader or an editor release. No
+  original source, artwork, executable, disk or capture is published.
+
 ## Open blockers
 
 - The [five missing files](#recovered-and-missing-files) still need locating;

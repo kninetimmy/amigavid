@@ -158,6 +158,13 @@ def exercise(exe, digest, work, out):
         buf = ct.create_unicode_buffer(str(text))
         checked(send(checked(get_child(hwnd, id)), 0x000C, 0, ct.addressof(buf), 2, 1000, None))
 
+    def replace_text(hwnd, id, text, start=0, end=-1):
+        # Native selection replacement respects edit limits; no clipboard API.
+        child = checked(get_child(hwnd, id))
+        buf = ct.create_unicode_buffer(str(text))
+        checked(send(child, 0x00B1, start, end, 2, 1000, None))
+        checked(send(child, 0x00C2, 0, ct.addressof(buf), 2, 1000, None))
+
     def command(hwnd, id, modal=False):
         child = checked(get_child(hwnd, id))
         if modal:
@@ -374,10 +381,20 @@ def exercise(exe, digest, work, out):
                 require(sha(frame(hwnd)) == next(reversed(checks_slide.values())),
                         f"{label}, a={duration}: final target")
                 if duration == 25:
-                    for index, invalid in enumerate(("2.5", "2x", " 2", "+2", "2 ", "",
-                                                     0, 256, "255x", "2" * 100)):
-                        edit(hwnd, 110, invalid)
-                        require(control_text(hwnd, 110) == str(invalid),
+                    inputs = tuple(("", 0, -1, str(value)) for value in
+                                   ("2.5", "2x", " 2", "+2", "2 ", "", 0, 256, "255x", "2" * 100))
+                    inputs += (("125", 1, 3, "999"), ("199", 3, 3, "9"),
+                               ("1259", 1, 3, "99"), (None, 0, -1, "1999"))
+                    for index, (initial, start, end, text) in enumerate(inputs):
+                        edit(hwnd, 110, initial or "")
+                        if initial is None:
+                            for digit in text:
+                                checked(send(get_child(hwnd, 110), 0x0102, ord(digit), 1, 2, 1000, None))
+                            invalid = text
+                        else:
+                            replace_text(hwnd, 110, text, start, end)
+                            invalid = initial[:start] + text + initial[len(initial) if end < 0 else end:]
+                        require(control_text(hwnd, 110) == invalid,
                                 f"{label}: invalid duration text was truncated before submission")
                         command(hwnd, button, modal=True)
                         until(proc, lambda: find(proc.pid, "#32770") or
@@ -392,6 +409,16 @@ def exercise(exe, digest, work, out):
                         require(unchanged.read_bytes() == expected_bytes,
                                 f"{label}: invalid UI duration {invalid!r} changed saved bytes")
                         require(rejected, f"{label}: invalid UI duration {invalid!r} had no error")
+                    edit(hwnd, 110, "25")
+                    replace_text(hwnd, 110, "55", 1, 2)
+                    require(control_text(hwnd, 110) == "255", f"{label}: valid selection replacement")
+                    command(hwnd, button)
+                    valid = work / f"duration-valid-{effect}.vid"
+                    open_file(hwnd, valid.name, 102)
+                    appended = expected_bytes.replace(b"\n0\n0\n0\n2\n", b"\n0\n0\n0\n3\n")
+                    appended += f"71\n{effect}\n7\n255\n0\n0\n0\n0\n0\nNOTEXT\n".encode("ascii")
+                    require(valid.read_bytes() == appended, f"{label}: native 255 replacement saved fields")
+                    open_file(hwnd, saved.name, 101)
                     for invalid in (0, 256):
                         bad = expected_bytes.replace(
                             f"25\n{effect}\n7\n25\n".encode("ascii"),
@@ -455,8 +482,8 @@ def exercise(exe, digest, work, out):
             require(copied.read_bytes() == metadata, f"{label}: imported supported fields changed")
             quit_editor(proc, hwnd)
         log.append(f"PASS {label}: nondefault author/track, paired target and a-e/text byte-exact; "
-                   "10 invalid UI duration strings (including 2.5 and overlong input) each "
-                   "report an error and save unchanged bytes; invalid import durations, "
+                    "14 native edit duration rejections (including selection replacement and typing) "
+                    "save unchanged bytes; native replacement to 255 saves exact fields; invalid import durations, "
                    "unsupported IDs, conflicting imports/drags "
                    "preserve the open sequence.")
     with unsafe_links(work, out):

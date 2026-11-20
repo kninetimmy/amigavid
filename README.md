@@ -44,7 +44,9 @@ output, accounting for the measured 98 display-color conversion.
 See the [milestone 3 evidence](PROGRESS.md#guest-verification).
 
 That guest-tested build predates the later timeline selection and drag
-fixes and the additional effects, which have been checked on Windows 11 only.
+fixes and the additional effects. Their preview checks remain Windows 11
+host evidence; the [focused XP paste regression](PROGRESS.md#native-paste-limit-repair)
+is not guest preview qualification.
 The screenshot below shows the timeline-fixed editor before the additional
 effect controls, on that development host, not a 98 or XP run.
 Physical Windows 98/XP hardware, original Amiga-reader compatibility and
@@ -251,6 +253,28 @@ These three tests use controlled stop ticks and frames; no archive, compiler,
 built executable or interactive desktop is needed. They check retry attempt
 order, immediate frame-mismatch failure and successful retry logging. They do
 not replace native `smoke`, measure playback timing or qualify Windows 98/XP.
+
+For the optional native clipboard regression, build the guest-only driver:
+
+```powershell
+python tools/editor.py paste_test
+```
+
+This only builds `.editor\paste-test-kit\PASTETST.EXE`; it never accesses the
+host clipboard. In an empty directory **inside a disposable, offline XP guest
+with no clipboard sharing**, place that driver, `VCEDIT.EXE` and a supported
+ILBM named `PIC.IFF`, then run:
+
+```text
+PASTETST.EXE --disposable-xp-guest VCEDIT.EXE PASTE.LOG
+```
+
+The driver supplies synthetic guest clipboard text and exercises `WM_PASTE`,
+selection replacement, all eight transitions and valid durations including
+255. `PASTE.LOG` records 104 cases with exact saved-byte comparisons and a
+final failure count. Do not run it on a user's desktop or reuse a workspace
+containing earlier test saves. QEMU is not required by ordinary host checks;
+this focused regression is not full guest qualification.
 
 Launch `.editor\VCEDIT.EXE` with a single absolute, local workspace directory:
 

@@ -1730,6 +1730,50 @@ the refusal; probe, archive, viewer and release instructions still apply.
   No full playback matrix or guest gate was run. Next: a separately approved
   small milestone 4 effect family.
 
+## Shortcut failure diagnostics — issue #52 (2026-11-21 UTC)
+
+- Shortcut diagnostics now go directly to the fresh run's exclusive
+  `SHORTCUT-TEST.txt`, flushed before printing each line. Both editor-close
+  paths retain the key and cleanup exception before propagating the error.
+  Handled errors mark the run incomplete; an overall summary is written only
+  after all eight cases and disposable workspace cleanup finish. The native
+  shortcut actions, comparison oracles and process-kill fallback are unchanged.
+- **Deterministic red/green:** the new comparison regression failed before
+  the repair (exit 1, missing `SHORTCUT-TEST.txt`). With mocked Win32/process
+  APIs, the real comparison observes IDs `[1, 3]` instead of `[1, 2]`, then
+  close raises `TimeoutExpired`. The repaired command returns 1 and the
+  persisted report retains Alt+U, observed/expected IDs, cleanup timeout and
+  incomplete status, with no overall summary. A second regression checks
+  that workspace cleanup failure prevents a passing summary even when the
+  exercise returns zero failures. Neither uses real input, windows or sleeps.
+- All three required local checks **passed (exit 0)**, not run by CI:
+  `python -m unittest discover -s tools` (**6 tests**),
+  `python tools/editor.py build` and `python tools/editor.py shortcut_test`.
+  The native run reports **PASS 8/8** with unique, unchanged button wording,
+  exact Slide/Peel and Save bytes, the named picture entry, Play at tick 1
+  and Seek at tick 25. Input remains queued messages to the test editor's
+  PID-checked controls; no global input or clipboard API was added.
+- Host: Windows 11 x64 build 26300, NTFS, Python 3.14.4. Bootstrap downloaded
+  and verified the pinned Open Watcom `2026-11-01-Build` asset. The rebuilt
+  x86 PE32 GUI 4.0/static WinMain/direct GDI32/KERNEL32/USER32 executable is
+  byte-identical to issue #50:
+  `69d3913d1f3476853ab0768fee73f498fae844510bb907446f94081fd4d25008`.
+  Python compilation and `git diff --check` also passed.
+- Preserve this worktree's ignored `.editor/shortcuts-sqpsdzx_/` (13 VID
+  evidence files and `SHORTCUT-TEST.txt`), `.editor/controlled-failure-v59mtagr/`
+  (mocked failure report and actual/expected saves, not a native editor run),
+  `.editor/ISSUE52-*.txt` command logs, `PE-IMPORTS.txt` and `editor.map` before
+  worktree cleanup. The passing report SHA-256 is
+  `0d2b766c36aadc0c57b404ee501ed07804fed14f7e3dc98ae37bd262d51931e0`.
+  All generated evidence and binaries remain private and untracked.
+- Reviewed the full README; corrected the focus claim to explain that normal
+  editor launches can take foreground focus, and documented partial/failure
+  reports and the deterministic checks. Other probe, archive, viewer, editor,
+  save-protection and release guidance remains current. This is Windows host
+  evidence only: no full playback matrix, Windows 98/XP guest, physical
+  hardware, original-reader or release qualification was run. The next
+  milestone remains a separately approved small effect family.
+
 ## Open blockers
 
 - The [five missing files](#recovered-and-missing-files) still need locating;

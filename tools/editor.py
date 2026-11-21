@@ -364,12 +364,22 @@ def shortcut_test():
     digest = sha256(exe)
     require(f"{digest}  {EXE}\n" in (out / "PE-IMPORTS.txt").read_text(encoding="utf-8"),
             "run build first")
-    with tempfile.TemporaryDirectory(dir=out, prefix="Shortcut Workspace ") as folder:
-        evidence = Path(tempfile.mkdtemp(dir=out, prefix="shortcuts-"))
-        print(f"Editor shortcut evidence: {evidence}", flush=True)
-        report, failures = exercise(exe, digest, Path(folder), evidence)
+    evidence = Path(tempfile.mkdtemp(dir=out, prefix="shortcuts-"))
+    print(f"Editor shortcut evidence: {evidence}", flush=True)
     with (evidence / "SHORTCUT-TEST.txt").open("x", encoding="utf-8") as stream:
-        stream.write(report)
+        def record(line):
+            stream.write(line + "\n")
+            stream.flush()
+            print(line, flush=True)
+
+        try:
+            with tempfile.TemporaryDirectory(dir=out, prefix="Shortcut Workspace ") as folder:
+                failures = exercise(exe, digest, Path(folder), evidence, record)
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            record(f"FAIL incomplete shortcut run: {type(error).__name__}: {error}")
+            raise
+        record(f"{'FAIL' if failures else 'PASS'} {8 - failures}/8 shortcut checks; "
+               "no global input injection or clipboard access; Windows host evidence only.")
     require(not failures, f"{failures} shortcut checks failed; see {evidence}")
 
 

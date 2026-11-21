@@ -11,7 +11,7 @@ from editor import require
 from editor_smoke import authored, row_card
 
 
-def exercise(exe, digest, work, evidence):
+def exercise(exe, digest, work, evidence, record):
     user = ct.WinDLL("user32", use_last_error=True)
     callback = ct.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
 
@@ -104,13 +104,18 @@ def exercise(exe, digest, work, evidence):
         until(proc, focused, "editor thread with filename focus")
         message(proc, child(hwnd, 109), 0x0106, ord(key), 1 | (1 << 29), queued=True)
 
-    log = [platform.platform(), f"{digest}  {exe.name}",
-           "Queued WM_SYSCHAR (Alt context) to the focused filename edit; "
-           "no direct command or click for the action under test."]
+    for line in (platform.platform(), f"{digest}  {exe.name}",
+                 "Queued WM_SYSCHAR (Alt context) to the focused filename edit; "
+                 "no direct command or click for the action under test."):
+        record(line)
 
-    def record(line):
-        log.append(line)
-        print(line, flush=True)
+    def close(proc, hwnd, key):
+        try:
+            message(proc, hwnd, 0x0010, queued=True)  # WM_CLOSE
+            require(proc.wait(timeout=10) == 0, "editor did not quit cleanly")
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            record(f"FAIL Alt+{key.upper()} editor cleanup: {type(error).__name__}: {error}")
+            raise
 
     def binding(proc, hwnd, key, button, label):
         captions, previous = [], None
@@ -166,8 +171,7 @@ def exercise(exe, digest, work, evidence):
 
                 unique = binding(proc, hwnd, key, button, f"Add {label}")
                 failures += not (ok and unique)
-                message(proc, hwnd, 0x0010, queued=True)  # WM_CLOSE after successful Save
-                require(proc.wait(timeout=10) == 0, "editor did not quit cleanly")
+                close(proc, hwnd, key)
             finally:
                 if proc.poll() is None:
                     proc.kill()
@@ -232,11 +236,8 @@ def exercise(exe, digest, work, evidence):
                     edit(proc, hwnd, saved.name)
                     message(proc, hwnd, 0x0111, 102)
                     retain(saved.name, saved.read_bytes())
-                message(proc, hwnd, 0x0010, queued=True)
-                require(proc.wait(timeout=10) == 0, "editor did not quit cleanly")
+                close(proc, hwnd, key)
             finally:
                 if proc.poll() is None:
                     proc.kill()
-    record(f"{'FAIL' if failures else 'PASS'} {8 - failures}/8 shortcut checks; "
-           "no global input injection or clipboard access; Windows host evidence only.")
-    return "\n".join(log) + "\n", failures
+    return failures

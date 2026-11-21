@@ -273,13 +273,25 @@ by the nonzero tick changing from unsubmitted `00025` to `25` without Play.
 All eight keys must have exactly one button binding and unchanged wording.
 The check posts keyboard messages to the editor's focused filename control,
 without a direct command or click for the action under test, global input
-injection, clipboard access or changing another window's focus. It polls
-observed focus/action/save state with deadlines, not a fixed delay; missing
-actions are completed failed cases rather than aborting the baseline run. The printed
-`.editor/shortcuts-*` directory retains actual/expected saves and the
-completed `SHORTCUT-TEST.txt`, including failed comparisons. An interrupted
-run may retain partial saves without a report. Keep this evidence local;
-this is host regression evidence, not Windows 98/XP qualification.
+injection or clipboard access. Launching each test editor normally can take
+foreground focus; the harness does not explicitly change another window's
+focus. It polls observed focus/action/save state with deadlines, not a fixed
+delay; missing actions are completed failed cases rather than aborting the
+baseline run. The printed `.editor/shortcuts-*` directory retains actual/expected
+saves and a `SHORTCUT-TEST.txt` updated and flushed after each diagnostic.
+Completed comparisons survive a later close timeout, with the key, observed
+outcome and cleanup error retained. Handled errors mark the run incomplete
+and exit unsuccessfully; an interrupted report may stop at its last diagnostic.
+Only a completed run, including workspace cleanup, has an overall shortcut
+summary; look for exit 0 and `PASS 8/8`. Keep this evidence local; this is host
+regression evidence, not Windows 98/XP qualification.
+
+The deterministic shortcut failure-evidence checks need no native editor or
+interactive desktop:
+
+```powershell
+python -m unittest discover -s tools -p test_editor_shortcuts.py
+```
 
 For a fast, deterministic check of timed Play retry diagnostics, run separately:
 

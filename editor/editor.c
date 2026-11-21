@@ -756,8 +756,8 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
         !control("BUTTON", "Add Scroll Dow&n", WS_TABSTOP, 464, 211, 118, 23, ADD_SCROLL_DOWN) ||
         !control("BUTTON", "Add Re&veal Up", WS_TABSTOP, 332, 238, 118, 23, ADD_REVEAL_UP) ||
         !control("BUTTON", "Add Revea&l Down", WS_TABSTOP, 464, 238, 118, 23, ADD_REVEAL_DOWN) ||
-        !control("BUTTON", "Add Peel &Up", WS_TABSTOP, 332, 265, 118, 23, ADD_PEEL_UP) ||
-        !control("BUTTON", "Add Peel &Down", WS_TABSTOP, 464, 265, 118, 23, ADD_PEEL_DOWN) ||
+        !control("BUTTON", "Add P&eel Up", WS_TABSTOP, 332, 265, 118, 23, ADD_PEEL_UP) ||
+        !control("BUTTON", "&Add Peel Down", WS_TABSTOP, 464, 265, 118, 23, ADD_PEEL_DOWN) ||
         !control("BUTTON", "&Play", WS_TABSTOP, 332, 292, 65, 23, PLAY) ||
         !control("BUTTON", "S&top", WS_TABSTOP, 401, 292, 65, 23, STOP) ||
         !(position = control("EDIT", "0", WS_BORDER | WS_TABSTOP | ES_NUMBER,

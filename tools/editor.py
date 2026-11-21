@@ -355,9 +355,27 @@ def smoke():
     draft.rename(evidence / "HOST-SMOKE.txt")  # Windows rename refuses an existing name.
 
 
+def shortcut_test():
+    from editor_shortcuts import exercise
+
+    out = local_dir(WORK)
+    exe = out / EXE
+    pe_headers(exe.read_bytes())
+    digest = sha256(exe)
+    require(f"{digest}  {EXE}\n" in (out / "PE-IMPORTS.txt").read_text(encoding="utf-8"),
+            "run build first")
+    with tempfile.TemporaryDirectory(dir=out, prefix="Shortcut Workspace ") as folder:
+        evidence = Path(tempfile.mkdtemp(dir=out, prefix="shortcuts-"))
+        print(f"Editor shortcut evidence: {evidence}", flush=True)
+        report, failures = exercise(exe, digest, Path(folder), evidence)
+    with (evidence / "SHORTCUT-TEST.txt").open("x", encoding="utf-8") as stream:
+        stream.write(report)
+    require(not failures, f"{failures} shortcut checks failed; see {evidence}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    steps = {fn.__name__: fn for fn in (build, test, smoke, paste_test)}
+    steps = {fn.__name__: fn for fn in (build, test, smoke, paste_test, shortcut_test)}
     parser.add_argument("command", choices=steps)
     try:
         steps[parser.parse_args().command]()

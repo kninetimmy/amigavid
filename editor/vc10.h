@@ -23,6 +23,9 @@
 #define VC_REVEAL_DOWN 9
 #define VC_PEEL_UP 10
 #define VC_PEEL_DOWN 11
+#define VC_SQUEEZE_ON_UP 12
+#define VC_SQUEEZE_ON_DOWN 13
+#define VC_ROW_ONE 128U           /* A source-row increment in 7-bit fixed point. */
 
 struct vc_screen {
     char first[VC_NAME], second[VC_NAME];
@@ -45,6 +48,7 @@ struct vc_frame {
     unsigned top, bottom, split;  /* screen IDs (0 is black); split is a row. */
     unsigned top_row, bottom_row; /* source row at the start of each region. */
     unsigned reflect;             /* top rows reverse after this row; 256 is off. */
+    unsigned top_step, bottom_step;
 };
 
 const char *vc_picture_path(const char *name);

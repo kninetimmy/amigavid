@@ -736,7 +736,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
         !control("STATIC", "Local filename (picture or .vid project)", 0, 332, 5, 252, 18, 0) ||
         !(files = control("EDIT", "", WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL,
                           332, 24, 250, 22, NAME)) ||
-        !control("BUTTON", "Open &picture", WS_TABSTOP, 332, 50, 80, 23, ADD_PICTURE) ||
+        !control("BUTTON", "Open p&icture", WS_TABSTOP, 332, 50, 80, 23, ADD_PICTURE) ||
         !control("BUTTON", "&Open VID", WS_TABSTOP, 416, 50, 80, 23, OPEN_PROJECT) ||
         !control("BUTTON", "&Save VID", WS_TABSTOP, 501, 50, 81, 23, SAVE_PROJECT) ||
         !control("STATIC", "Screen for the next cue", 0, 332, 82, 250, 18, 0) ||
@@ -762,7 +762,7 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
         !control("BUTTON", "S&top", WS_TABSTOP, 401, 292, 65, 23, STOP) ||
         !(position = control("EDIT", "0", WS_BORDER | WS_TABSTOP | ES_NUMBER,
                              475, 292, 54, 22, TICK)) ||
-        !control("BUTTON", "&Seek", WS_TABSTOP, 533, 292, 49, 23, SEEK) ||
+        !control("BUTTON", "See&k", WS_TABSTOP, 533, 292, 49, 23, SEEK) ||
         !(status = control("STATIC", "Enter a filename from the workspace.", 0,
                            16, 292, 304, 27, 0))) {
         error("Cannot initialize editor controls.");

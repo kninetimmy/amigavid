@@ -264,12 +264,18 @@ python tools/editor.py shortcut_test
 It needs an unlocked interactive Windows desktop but no archive or host C
 compiler. Generated pictures and a fresh editor process per key check that
 **Alt+U** adds Slide On Up (ID 2), **Alt+D** adds Slide On Down (3),
-**Alt+E** adds Peel Up (10) and **Alt+A** adds Peel Down (11).
-Each key must have exactly one button binding and add exactly one cue,
-verified against independent saved VC10 bytes. The check posts keyboard
-messages to the editor's focused filename control, without global input
-injection, clipboard access or changing another window's focus. It waits
-for observed focus/save state, not a fixed delay. The printed
+**Alt+E** adds Peel Up (10) and **Alt+A** adds Peel Down (11), each adding
+exactly one cue verified against independent saved VC10 bytes. It also checks
+**Alt+I → Open picture** by its named screen-list entry,
+**Alt+P → Play** by observed Playing status and clock progress in a prepared
+sequence, **Alt+S → Save VID** by exact expected bytes, and **Alt+K → Seek**
+by the nonzero tick changing from unsubmitted `00025` to `25` without Play.
+All eight keys must have exactly one button binding and unchanged wording.
+The check posts keyboard messages to the editor's focused filename control,
+without a direct command or click for the action under test, global input
+injection, clipboard access or changing another window's focus. It polls
+observed focus/action/save state with deadlines, not a fixed delay; missing
+actions are completed failed cases rather than aborting the baseline run. The printed
 `.editor/shortcuts-*` directory retains actual/expected saves and the
 completed `SHORTCUT-TEST.txt`, including failed comparisons. An interrupted
 run may retain partial saves without a report. Keep this evidence local;
@@ -318,7 +324,7 @@ Launch `.editor\VCEDIT.EXE` with a single absolute, local workspace directory:
 On a guest, for example: `C:\M3EDIT\VCEDIT.EXE C:\M3EDIT`. Copy your two
 pictures to that folder first. It must be on local FAT on Windows 98.
 
-1. Enter the first picture's filename, then **Open picture** (Ctrl+I).
+1. Enter the first picture's filename, then **Open picture** (Alt+I or Ctrl+I).
    Choose **Add Straight Cut**. Open the second picture and choose
    **Add Slide On Up**, **Add Slide On Down**, **Add Slide Off Up** or
    **Add Slide Off Down**, or choose **Add Scroll Up**, **Add Scroll Down**,
@@ -329,9 +335,9 @@ pictures to that folder first. It must be on local FAT on Windows 98.
    breaks.
 2. Drag the second cue's marker horizontally to a new start tick. Cues
    are kept in time order; a drop that would overlap is refused. **Play**
-   (F5) starts from tick 0, **Stop** (Esc) holds the frame, and **Seek**
+   (Alt+P or F5) starts from tick 0, **Stop** (Esc) holds the frame, and **Seek** (Alt+K)
    renders the exact tick in the edit box without waiting on the timer.
-3. Enter a new `.vid` filename, then **Save VID** (Ctrl+S). Quit and
+3. Enter a new `.vid` filename, then **Save VID** (Alt+S or Ctrl+S). Quit and
    relaunch, enter the same filename, **Open VID** (Ctrl+O), then **Play**.
    Move the file together with its pictures to play on another PC.
 

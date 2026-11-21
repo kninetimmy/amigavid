@@ -1673,6 +1673,63 @@ the refusal; probe, archive, viewer and release instructions still apply.
   original-reader, playback or editor-release qualification. The next
   milestone remains a separately approved small effect family.
 
+## File and playback keyboard shortcuts — issue #50 (2026-11-21 UTC)
+
+- Moved only two production ampersands: **Open p&icture → Alt+I** and
+  **See&k → Alt+K**. **Alt+P → Play** and **Alt+S → Save VID** now have
+  unique button bindings. All visible words, other captions/mnemonics, layout,
+  command handlers and the Ctrl+I/Ctrl+O/Ctrl+S/F5/Esc accelerator table
+  remain unchanged.
+- Extended the existing `python tools/editor.py shortcut_test`, keeping
+  all four Slide/Peel saved-byte cases. Four additional fresh processes
+  post queued `WM_SYSCHAR` to the editor thread's observed focused filename
+  control, never a direct command or click for the action under test.
+  Generated row cards and the existing independent VC10 fixture helper
+  supply the inputs; there is no archive, global input or clipboard access.
+  Open picture must add the named screen-list entry; Play must report
+  Playing and advance the real clock in a sequence whose second cue starts
+  at tick 4000; Save must match all 140 expected bytes; Seek must rewrite
+  unsubmitted `00025` to `25` while retaining Project opened status and
+  both pictures, without Play. Deadlines make absent actions ordinary failed
+  cases so the baseline report completes.
+- **Red:** `python tools/editor.py build` **passed (exit 0)** on unchanged
+  production source, reproducing `VCEDIT.EXE` SHA-256
+  `f2239d1afd333bf719722e7021418fb291fbd3040ecc3a62888710360802bb2c`.
+  `python tools/editor.py shortcut_test` **failed as expected (exit 1,
+  4/8 checks passed)**. U/D/E/A retained their exact two-cue saves.
+  I opened nothing; P opened a third picture instead of playing (tick 0);
+  S saved the expected VID but had duplicate Save/Seek bindings;
+  K left `00025` unsubmitted. Completed report and saves:
+  `.editor/shortcuts-9_wkltlw/`. Separate executable, PE report, map,
+  source/harness snapshot and command logs: `.editor/red/`.
+- **Green:** both required build and shortcut commands **passed (exit 0)**.
+  All **8/8** keys had unique bindings and correct results: I opened
+  `6: ROWSA.IFF`; P reported Playing at tick 1 with two pictures;
+  S saved the exact 140-byte fixture (SHA-256
+  `9610010663ed3685875812bae16fdf14c261a061bcacc561a0993ff1bb1ee29c`);
+  K submitted tick 25 with unchanged Project opened status and two pictures.
+  U/D/E/A still saved exactly IDs `[1, 2]`, `[1, 3]`, `[1, 10]`, `[1, 11]`.
+  Completed report and saves: `.editor/shortcuts-3wb9q8kv/`.
+  Separate build artifacts and command logs: `.editor/green/`.
+  Fixed executable SHA-256:
+  `69d3913d1f3476853ab0768fee73f498fae844510bb907446f94081fd4d25008`.
+- Required `python -m unittest discover -s tools -p test_*.py -v`
+  **passed (4 tests, exit 0)**; `python -m py_compile
+  tools/editor_shortcuts.py` and `git diff --check` passed. These checks
+  and both native commands ran locally, not in CI.
+- Host: Windows 11 x64 build 26300, Python 3.14.4, NTFS. The documented
+  bootstrap verified the pinned Open Watcom `2026-11-01-Build` checksum.
+  Both builds retain x86 PE32 GUI 4.0, static WinMain startup and direct
+  GDI32/KERNEL32/USER32 imports. Preserve ignored reports, saves and
+  `.editor/` build/command logs before worktree cleanup; no private assets
+  or binaries are committed.
+- Reviewed the full README against shipped behavior and recorded evidence;
+  updated the four bindings and focused test, with the remaining guidance
+  current. This is Windows host keyboard evidence only, not Windows 98/XP,
+  physical-hardware, original-reader or editor-release qualification.
+  No full playback matrix or guest gate was run. Next: a separately approved
+  small milestone 4 effect family.
+
 ## Open blockers
 
 - The [five missing files](#recovered-and-missing-files) still need locating;

@@ -85,7 +85,7 @@ int vc_place(struct vc_project *project, unsigned index, const struct vc_cue *cu
     unsigned long end;
 
     if (index > n || (index == n && n == VC_CUES) || cue->tick > VC_TICK_MAX ||
-        (cue->effect < VC_CUT || cue->effect > VC_PEEL_DOWN) ||
+        (cue->effect < VC_CUT || cue->effect > VC_SQUEEZE_ON_DOWN) ||
         (cue->effect != VC_CUT && (!cue->a || cue->a > 255)))
         return 0;
     end = cue->tick + vc_length(cue);
@@ -230,7 +230,7 @@ const char *vc_read(struct vc_project *project, const char *data, size_t size)
         return "Invalid or empty cue list.";
     for (i = 0; i < count; ++i) {
         if (!number(&reader, VC_TICK_MAX, &cue.tick) ||
-            !word(&reader, VC_PEEL_DOWN, &cue.effect) || !cue.effect ||
+            !word(&reader, VC_SQUEEZE_ON_DOWN, &cue.effect) || !cue.effect ||
             !word(&reader, project->screens + VC_FIRST_SCREEN - 1, &cue.screen) ||
             cue.screen < VC_FIRST_SCREEN ||
             !word(&reader, 65535, &cue.a) || !word(&reader, 65535, &cue.b) ||
@@ -286,7 +286,7 @@ size_t vc_write(const struct vc_project *project, char data[VC_BYTES])
 
 struct vc_frame vc_at(const struct vc_project *project, unsigned long tick)
 {
-    struct vc_frame frame = { 0, 0, VC_HEIGHT, 0, 0, VC_HEIGHT };
+    struct vc_frame frame = { 0, 0, VC_HEIGHT, 0, 0, VC_HEIGHT, VC_ROW_ONE, VC_ROW_ONE };
     const struct vc_cue *cue;
     unsigned i, step;
     unsigned long distance;
@@ -308,12 +308,21 @@ struct vc_frame vc_at(const struct vc_project *project, unsigned long tick)
                 frame.split = 255 - (unsigned)distance;
                 frame.bottom = cue->screen;
                 switch (cue->effect) {
+                case VC_SQUEEZE_ON_UP:
+                    /* CopLoop truncates the 7-bit increment before accumulating
+                       it from source row zero, not after scaling each row. */
+                    frame.top_step = VC_HEIGHT * VC_ROW_ONE / frame.split;
+                    break;
                 case VC_SLIDE_ON_DOWN:
+                case VC_SQUEEZE_ON_DOWN:
                     frame.bottom = frame.top;
                     frame.top = cue->screen;
                     frame.split = (unsigned)distance;
-                    frame.top_row = 256 - frame.split;
-                    frame.bottom_row = frame.split;
+                    frame.top_row = VC_HEIGHT - frame.split;
+                    if (cue->effect == VC_SQUEEZE_ON_DOWN)
+                        frame.bottom_step = VC_HEIGHT * VC_ROW_ONE / frame.top_row;
+                    else
+                        frame.bottom_row = frame.split;
                     break;
                 case VC_SLIDE_OFF_UP:
                     frame.top_row = 256 - frame.split;

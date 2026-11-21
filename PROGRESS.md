@@ -1774,6 +1774,68 @@ the refusal; probe, archive, viewer and release instructions still apply.
   hardware, original-reader or release qualification was run. The next
   milestone remains a separately approved small effect family.
 
+## Milestone 4 batch 4 — Squeeze On Up and Down
+
+- The pinned archive was reverified before inspecting `vc/veffects.h:28–29`
+  and `vc/neweffects.c:1122–1144,1231–1251,1503–1518,1939–1940`.
+  IDs 12/13 use the shared screen class, placement length, field step and
+  duration range 1–255 (default 25). VC10 preserves their timing, screen,
+  parameters and text. IDs above 13 are still refused.
+- `vc/fx.c:775–857` sets Up's split and outgoing height to `Value`, with
+  incoming row 0 at the split. Down sets the split to `Value`, starts the
+  incoming picture at source row `256 - Value`, and squashes the outgoing
+  picture into the bottom `256 - Value` rows. Both End routines select the
+  target and remove the temporary row state, even when duration 1 reaches
+  End before the first Func. A first cue at tick 0 still gets one field
+  update at that tick; later starts get two.
+- `vc/videocreator.asm:1033–1052,1114–1217` divides 32768 by the outgoing
+  region height, truncates that quotient, and accumulates it with seven
+  fractional bits. The squashed region fetches source row 0 before its
+  first advance. At a positive start with duration 25 the heights are 243 (Up)
+  and 244 (Down). Outgoing region row 19 (Up) reads source row 19, not 20;
+  region row 21 (Down, output row 33) reads source row 21, not 22.
+  These are logical row selections, not chipset scanout or field-timing
+  measurements on the original hardware.
+- The new Tab-reachable buttons use the existing screen and duration
+  controls. Their positions below the preview leave playback, timeline
+  geometry and existing mnemonics unchanged.
+
+### Host verification — 2026-11-21 UTC
+
+- `python tools/editor.py build` and `python tools/editor.py test` passed
+  (exit 0) on Windows 11 Pro x64 `26300.9974`, NTFS, Python 3.14.4 and
+  GCC 16.1.0. The build reverified the pinned Open Watcom cache, with no
+  download. x86 PE32 GUI 4.0, static WinMain, direct GDI32/KERNEL32/USER32,
+  no delay imports. `VCEDIT.EXE` SHA-256:
+  `9676cb7a7330f2a51ba3787d294570ed676a5119a98074e85242711c280ab022`.
+- Model checks pass for all supported IDs, including LF/CRLF round-trips,
+  preserved nondefault parameters, placement and field timing, both
+  Squeeze On increments and adjacent-cue reset. All 27 malformed/unsafe
+  cases and existing NT save protection checks pass.
+- `python tools/editor.py smoke` passed (exit 0): 120 first-cue cases
+  and 72 Cut-then-transition cases, including 36 Squeeze On cases at
+  durations 1/2/19/25/65/255. First cues start at tick 0 or 1; cues after
+  Cut start at 25. Seek and timed Play matched all 81,920 pixels at each
+  sampled tick, with no Play retries. Of 18 adjacent sequences, six
+  followed Squeeze On at durations 1/25/255 and showed no residual
+  scaling or offset. Refused opens (including ID 14) left the preview
+  and saved bytes unchanged. Earlier native regression cases passed.
+- `python tools/editor.py shortcut_test` passed (exit 0, 8/8).
+  A separate native check confirmed both buttons are enabled, reachable
+  in Tab order and hit-testable without overlapping the preview or other
+  visible controls. All six Python unit tests passed.
+- An independent check matched 264 retained Squeeze On RGB captures and
+  80 exact VC10 saves, including the split boundaries and non-divisor
+  rounding samples in both Seek and Play. The ignored `.editor/`
+  directory holds `smoke-bql6vcav/`, `shortcuts-fz2ddr7h/`, the build
+  and command logs, and `ISSUE54-manifest.json` with 563 verified artifact
+  hashes. Preserve that evidence before worktree cleanup; no original
+  material or native captures are published.
+- Reviewed the full README and documented the new controls, behavior and
+  scope of verification. All four required checks ran locally, not in CI.
+  No Windows 98/XP guest, physical hardware, original-reader or release
+  qualification was performed for this build.
+
 ## Open blockers
 
 - The [five missing files](#recovered-and-missing-files) still need locating;
@@ -1797,8 +1859,9 @@ independent development step; the viewer now has host and four-guest
 evidence under #16's calibrated-output criterion. Before milestone 3,
 the next step was to edit, save, reopen and replay one sequence. The
 two-picture workflow is now implemented, followed by the vertical slide,
-Scroll Up/Down (6/7), Reveal Up/Down (8/9) and Peel Up/Down (10/11) families
-above. The rest of milestone 4 and special screens remain outstanding; choose
-the next small effect family through a separately approved plan. Obtain physical Windows 98 and XP
+Scroll Up/Down (6/7), Reveal Up/Down (8/9), Peel Up/Down (10/11) and
+Squeeze On Up/Down (12/13) families above. The rest of milestone 4 and
+special screens remain outstanding; choose the next small effect family
+through a separately approved plan. Obtain physical Windows 98 and XP
 [probe target-checklist](probe/TEST.TXT) results before claiming native
 hardware validation. Editor-release workflows remain unverified.

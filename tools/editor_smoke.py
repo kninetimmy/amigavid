@@ -75,6 +75,21 @@ def slide_pixels(effect, duration, elapsed, moved, first, second):
             other[y * 960:(y + 1) * 960] if value < 128 and y >= 2 * value
             else rows[y if y <= value else 2 * value - y]
             for y in range(256))
+    if effect in (12, 13):
+        # fx.c SqueezeOn Funcs, then CopLoop's outgoing row pointer. The
+        # modulo changes the advance AFTER the current fetch. DIVU chops
+        # the increment first; keep the low seven bits between fetches.
+        height = (255 if effect == 12 else 256) - moved
+        advance = 32768 // height
+        pointer, fraction = 0, 0
+        rows = []
+        for _ in range(height):
+            rows.append(first[pointer * 960:(pointer + 1) * 960])
+            stride, fraction = divmod(fraction + advance, 128)
+            pointer += stride
+        outgoing = b"".join(rows)
+        return outgoing + second[:(256 - height) * 960] if effect == 12 else \
+            second[height * 960:] + outgoing
     raise ValueError(f"no source pixel expectation for effect {effect}")
 
 
@@ -92,9 +107,10 @@ def play_capture(tick, expected, stop, frame, log):
         actual = stop()
         stops.append(actual)
         if actual == tick:
-            require(hashlib.sha256(frame()).hexdigest() == expected,
-                    f"timed Play frame at tick {tick}")
-            return
+            pixels = frame()
+            require(hashlib.sha256(pixels).hexdigest() == expected,
+                     f"timed Play frame at tick {tick}")
+            return pixels
         if actual is not None:
             log.append(f"RETRY timed Play skipped tick {tick}, stopped at {actual}.")
     raise ValueError(f"timed Play did not stop at tick {tick} in three attempts; "
@@ -319,8 +335,10 @@ def exercise(exe, digest, work, evidence):
                    (4, 113, "Slide Off Up"), (5, 114, "Slide Off Down"),
                    (6, 115, "Scroll Up"), (7, 116, "Scroll Down"),
                    (8, 117, "Reveal Up"), (9, 118, "Reveal Down"),
-                   (10, 119, "Peel Up"), (11, 120, "Peel Down"))
+                   (10, 119, "Peel Up"), (11, 120, "Peel Down"),
+                   (12, 121, "Squeeze On Up"), (13, 122, "Squeeze On Down"))
     for effect, button, label in transitions:
+        family = "squeeze" if effect >= 12 else "peel"
         for duration, samples in FIRST_SLIDE_SAMPLES.items():
             for start in ((0, 1) if effect >= 6 else (0,)):
                 print(f"CHECK first {label}, a={duration}, start={start}", flush=True)
@@ -341,7 +359,7 @@ def exercise(exe, digest, work, evidence):
                     for sampled, expected in checks_first.items():
                         pixels = capture(proc, hwnd, sampled, expected)
                         if effect >= 10:
-                            retain(f"peel-first-{effect}-{duration}-{start}-{sampled}.rgb", pixels)
+                            retain(f"{family}-first-{effect}-{duration}-{start}-{sampled}.rgb", pixels)
                     open_file(hwnd, saved.name, 102)
                     require(saved.read_bytes() == expected_bytes, "first transition authored fields differ")
                     if effect >= 10:
@@ -352,7 +370,7 @@ def exercise(exe, digest, work, evidence):
                     for sampled, expected in reversed(tuple(checks_first.items())):
                         capture(proc, hwnd, sampled, expected)
                         if effect >= 10:
-                            log.append(f"PASS first Peel ID {effect}, a={duration}, start={start}, "
+                            log.append(f"PASS first {label} ID {effect}, a={duration}, start={start}, "
                                        f"tick={sampled}: RGB24 SHA-256 {expected}")
                     for sampled, expected in checks_first.items():
                         play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
@@ -362,11 +380,17 @@ def exercise(exe, digest, work, evidence):
                           "first transition playback completion")
                     require(sha(frame(hwnd)) == next(reversed(checks_first.values())),
                             "first transition final frame")
+                    if effect >= 12:
+                        copied = work / f"reopened-{saved.name}"
+                        open_file(hwnd, copied.name, 102)
+                        require(copied.read_bytes() == expected_bytes, f"first {label}: reopened bytes differ")
+                        retain(copied.name, copied.read_bytes())
                     quit_editor(proc, hwnd)
                 log.append(f"PASS first {label} ID {effect}, a={duration}, start={start}: "
                            f"author/save/restart/reopen, Seek and Play at ticks {tuple(checks_first)}, "
                            "exact 81,920-pixel black/row-card comparisons and final frame.")
     for effect, button, label in transitions:
+        family = "squeeze" if effect >= 12 else "peel"
         for duration, samples in SLIDE_SAMPLES.items():
             print(f"CHECK Cut then {label}, a={duration}", flush=True)
             expected_bytes = authored("ROWSA.IFF", "ROWSB.IFF", 25, duration, effect)
@@ -389,7 +413,7 @@ def exercise(exe, digest, work, evidence):
                 for sampled, expected in checks_slide.items():
                     pixels = capture(proc, hwnd, sampled, expected)
                     if effect >= 10:
-                        retain(f"peel-cut-{effect}-{duration}-{sampled}.rgb", pixels)
+                        retain(f"{family}-cut-{effect}-{duration}-{sampled}.rgb", pixels)
                 open_file(hwnd, saved.name, 102)
                 require(saved.read_bytes() == expected_bytes,
                         f"{label}, a={duration}: authored fields differ")
@@ -401,11 +425,13 @@ def exercise(exe, digest, work, evidence):
                 for sampled, expected in reversed(tuple(checks_slide.items())):
                     capture(proc, hwnd, sampled, expected)
                     if effect >= 10:
-                        log.append(f"PASS Cut/Peel ID {effect}, a={duration}, tick={sampled}: "
+                        log.append(f"PASS Cut/{label} ID {effect}, a={duration}, tick={sampled}: "
                                    f"RGB24 SHA-256 {expected}")
                 for sampled, expected in checks_slide.items():
-                    play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
-                                 lambda: frame(hwnd), log)
+                    pixels = play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
+                                          lambda: frame(hwnd), log)
+                    if effect >= 12:
+                        retain(f"squeeze-play-{effect}-{duration}-{sampled}.rgb", pixels)
                 command(hwnd, 105)
                 until(proc, lambda: find_child(hwnd, None, "STATIC", "Playback complete."),
                       f"{label}, a={duration}: playback completion")
@@ -457,7 +483,7 @@ def exercise(exe, digest, work, evidence):
                         (work / "bad-slide.vid").write_bytes(bad)
                         open_file(hwnd, "bad-slide.vid", 101, modal=True)
                         dialog(proc, "Invalid or unsupported")
-                    for unsupported in (0, 12, 49, 900):
+                    for unsupported in (0, 14, 49, 900):
                         bad = expected_bytes.replace(f"25\n{effect}\n7\n".encode("ascii"),
                                                      f"25\n{unsupported}\n7\n".encode("ascii"))
                         (work / "bad-slide.vid").write_bytes(bad)
@@ -474,7 +500,9 @@ def exercise(exe, digest, work, evidence):
                 open_file(hwnd, roundtrip.name, 102)
                 require(roundtrip.read_bytes() == expected_bytes,
                         f"{label}, a={duration}: reopen/rejection changed fields")
-                if effect >= 6 and duration in (1, 25):
+                if effect >= 12:
+                    retain(roundtrip.name, roundtrip.read_bytes())
+                if effect >= 6 and (duration in (1, 25) or effect >= 12 and duration == 255):
                     # Independently reserved lengths from CalculateLength;
                     # the following Slide is legally adjacent, with no gap.
                     base, target = cards[1][1], cards[0][1]
@@ -482,7 +510,7 @@ def exercise(exe, digest, work, evidence):
                     if effect in (7, 9, 11) and duration == 1:
                         base, target = cards[0][1], cards[1][1]
                         target_screen = 7
-                    following_tick = 25 + (2 if duration == 1 else 22)
+                    following_tick = 25 + {1: 2, 25: 22, 255: 129}[duration]
                     following = expected_bytes.replace(b"\n0\n0\n0\n2\n", b"\n0\n0\n0\n3\n")
                     following += (f"{following_tick}\n2\n{target_screen}\n19\n"
                                   "0\n0\n0\n0\n0\nNOTEXT\n").encode("ascii")
@@ -491,9 +519,12 @@ def exercise(exe, digest, work, evidence):
                     for elapsed, moved in SLIDE_SAMPLES[19]:
                         sampled = following_tick + elapsed
                         expected = sha(slide_pixels(2, 19, elapsed, moved, base, target))
-                        capture(proc, hwnd, sampled, expected)
-                        play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
-                                     lambda: frame(hwnd), log)
+                        seek_pixels = capture(proc, hwnd, sampled, expected)
+                        play_pixels = play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
+                                                   lambda: frame(hwnd), log)
+                        if effect >= 12:
+                            retain(f"squeeze-adjacent-seek-{effect}-{duration}-{sampled}.rgb", seek_pixels)
+                            retain(f"squeeze-adjacent-play-{effect}-{duration}-{sampled}.rgb", play_pixels)
                     adjacent = work / f"adjacent-{effect}-{duration}.vid"
                     open_file(hwnd, adjacent.name, 102)
                     require(adjacent.read_bytes() == following,
@@ -505,8 +536,7 @@ def exercise(exe, digest, work, evidence):
                 quit_editor(proc, hwnd)
             log.append(f"PASS {label} ID {effect}, a={duration}: native author/save/restart/reopen, "
                        f"backward Seek and clock-paced Play at ticks {tuple(checks_slide)}, "
-                        "exact 81,920-pixel row-card comparisons, final frame and saved bytes; "
-                        "new IDs at a=1/25 also check an adjacent following Slide with Seek/Play.")
+                        "exact 81,920-pixel row-card comparisons, final frame and saved bytes.")
         metadata = FIXTURE.replace(b"50\n2\n7\n", f"50\n{effect}\n8\n".encode("ascii"))
         imported = work / f"metadata-{effect}.vid"
         imported.write_bytes(metadata)
@@ -515,6 +545,8 @@ def exercise(exe, digest, work, evidence):
             copied = work / f"fields-{effect}.vid"
             open_file(hwnd, copied.name, 102)
             require(copied.read_bytes() == metadata, f"{label}: imported supported fields changed")
+            if effect >= 12:
+                retain(copied.name, copied.read_bytes())
             quit_editor(proc, hwnd)
         log.append(f"PASS {label}: nondefault author/track, paired target and a-e/text byte-exact; "
                     "14 native edit duration rejections (including selection replacement and typing) "

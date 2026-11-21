@@ -32,7 +32,8 @@ saves, reopens and replays the sequence.
 
 Milestone 4 adds **Slide On Down**, **Slide Off Up** and **Slide Off Down**
 (VC10 IDs 3–5), followed by **Scroll Up**, **Scroll Down**, **Reveal Up**
-and **Reveal Down** (IDs 6–9), then **Peel Up** and **Peel Down** (IDs 10/11).
+and **Reveal Down** (IDs 6–9), **Peel Up** and **Peel Down** (IDs 10/11),
+and **Squeeze On Up** and **Squeeze On Down** (IDs 12/13).
 These additions have Windows 11 host checks, not guest qualification.
 
 **The first useful workflow has been demonstrated in QEMU:** on Windows
@@ -340,7 +341,9 @@ pictures to that folder first. It must be on local FAT on Windows 98.
    Choose **Add Straight Cut**. Open the second picture and choose
    **Add Slide On Up**, **Add Slide On Down**, **Add Slide Off Up** or
    **Add Slide Off Down**, or choose **Add Scroll Up**, **Add Scroll Down**,
-   **Add Reveal Up**, **Add Reveal Down**, **Add Peel Up** or **Add Peel Down**.
+   **Add Reveal Up**, **Add Reveal Down**, **Add Peel Up**, **Add Peel Down**,
+   **Add Squeeze On Up** or **Add Squeeze On Down**. The Squeeze On buttons
+   sit below the preview and are reachable with Tab; neither adds an Alt key.
    The screen list selects the target for the next cue; **Ticks** sets
    the transition duration parameter
    (1–255, default 25), in 25ths of a second. Paste one duration, with no line
@@ -400,8 +403,17 @@ Windows 11 host checks cover first-cue and Cut-then-Peel author/save/reopen,
 exact row-card pixels at Values 127/128, duration 1, completion and adjacent
 cues through Seek and Play. These are not Windows 98/XP preview qualifications.
 
+Squeeze On compresses the outgoing picture toward the top (Up) or bottom
+(Down) as the incoming picture slides in from the opposite edge. The row
+selection uses the original truncated fixed-point increment rather than
+ideal scaling. Both one-tick directions settle on the target, and the next
+cue has no leftover scaling or offset. Windows 11 host checks cover native
+author/save/reopen and exact row-card pixels through Seek and Play, including
+durations 1, 25 and 255. See the
+[Squeeze On evidence](PROGRESS.md#milestone-4-batch-4--squeeze-on-up-and-down).
+
 The editor preserves active VC10 screen order, paired references, author,
-track number, and all eleven supported effects' IDs, timing, parameters and text.
+track number, and supported effect IDs 1–13 with their timing, parameters and text.
 It previews the first member of a pair only; Psycho Flicker and CD audio are not
 implemented. Other effect IDs, special screen IDs, object tables and
 malformed files are refused without replacing the open document. To replace a

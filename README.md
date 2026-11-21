@@ -255,6 +255,26 @@ there, but there is no completed report. The disposable editor workspace
 is still separate, and the executable, linker map and PE report stay
 directly in `.editor/`. Keep all smoke evidence local.
 
+For the focused Windows keyboard regression, run after `build`:
+
+```powershell
+python tools/editor.py shortcut_test
+```
+
+It needs an unlocked interactive Windows desktop but no archive or host C
+compiler. Generated pictures and a fresh editor process per key check that
+**Alt+U** adds Slide On Up (ID 2), **Alt+D** adds Slide On Down (3),
+**Alt+E** adds Peel Up (10) and **Alt+A** adds Peel Down (11).
+Each key must have exactly one button binding and add exactly one cue,
+verified against independent saved VC10 bytes. The check posts keyboard
+messages to the editor's focused filename control, without global input
+injection, clipboard access or changing another window's focus. It waits
+for observed focus/save state, not a fixed delay. The printed
+`.editor/shortcuts-*` directory retains actual/expected saves and the
+completed `SHORTCUT-TEST.txt`, including failed comparisons. An interrupted
+run may retain partial saves without a report. Keep this evidence local;
+this is host regression evidence, not Windows 98/XP qualification.
+
 For a fast, deterministic check of timed Play retry diagnostics, run separately:
 
 ```powershell

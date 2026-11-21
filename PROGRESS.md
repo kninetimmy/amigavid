@@ -1616,6 +1616,63 @@ the refusal; probe, archive, viewer and release instructions still apply.
   CI. No Windows 98/XP guest, physical hardware, original-reader or editor
   release qualification was run; the next milestone is unchanged.
 
+## Editor keyboard shortcuts — issue #48 (2026-11-21 UTC)
+
+- Kept **Alt+U → Slide On Up (2)** and **Alt+D → Slide On Down (3)**.
+  Moved only the two Peel button ampersands: **Alt+E → Peel Up (10)**
+  and **Alt+A → Peel Down (11)**. Visible wording, layout, other shortcuts,
+  effect behavior and VC10 grammar are unchanged.
+- Added `python tools/editor.py shortcut_test`, a focused native Windows
+  check using generated row cards and the existing independent saved-byte
+  expectation. Each fresh editor starts with a Cut and two pictures.
+  The check verifies the editor thread's filename focus, posts one
+  `WM_SYSCHAR` with lowercase ASCII and the Alt context bit, then queues
+  Save behind it. The executable's ordinary `IsDialogMessageA` path
+  activates the transition; the test never clicks or sends a command for
+  that transition. Exact saved bytes require precisely one added cue with
+  the expected ID, target, tick and default duration. Button captions also
+  prove each of these four keys is unique and its wording is unchanged.
+- No global keyboard injection, clipboard API or foreground-window change
+  is used. Deadline-bounded polling waits for observed focus and completed
+  Save, rather than assuming a fixed delay. Earlier harness attempts stopped
+  at an unnecessary foreground-window precondition; the diagnostic confirmed
+  the editor thread already had the correct focus. Those attempts are
+  retained separately and are not the completed baseline result.
+- **Red:** a clean pre-fix build reproduced SHA-256
+  `b635eb8f4de09cbec9ba3a473cc92a6c841094a9ec9d31aea35d5eb8134d0684`.
+  The new command **failed (exit 1)**: U/D saved exactly Cut plus IDs 2/3
+  but had duplicate button bindings; E/A saved only the original Cut,
+  with no Peel cue or binding. Actual and expected files and the completed
+  report remain in `.editor/shortcuts-ed8kj41x/`; the executable and build
+  provenance are in `.editor/baseline/`.
+- **Green:** required local `python tools/editor.py build` and
+  `python tools/editor.py shortcut_test` both **passed (exit 0)**, not in
+  CI. All **4/4** keys saved exact two-cue projects with IDs `[1, 2]`,
+  `[1, 3]`, `[1, 10]` and `[1, 11]`, with unique button bindings.
+  Host: Windows 11 x64 `26300.9974`, NTFS, Python 3.14.4.
+  Bootstrap downloaded and verified the pinned Open Watcom
+  `2026-11-01-Build` asset; the PE32 x86 GUI 4.0/static WinMain/direct
+  GDI32/KERNEL32/USER32 profile is unchanged. Fixed `VCEDIT.EXE` SHA-256:
+  `f2239d1afd333bf719722e7021418fb291fbd3040ecc3a62888710360802bb2c`.
+- `python -m unittest discover -s tools -p "test_*.py" -v`
+  **passed (4 tests, exit 0)**. `python -m py_compile tools/editor.py
+  tools/editor_shortcuts.py` and `git diff --check` passed. Narrow checks
+  rejected an unknown command (exit 2) and mismatched build provenance
+  (exit 1, before native exercise/evidence creation). An independent
+  literal-byte comparison rechecked all eight baseline/fixed saves; an
+  entire-source comparison confirmed only the two C ampersands changed.
+- Private evidence: `.editor/ISSUE48-*.txt` command/diagnostic logs,
+  `.editor/shortcuts-57qw88vl/` actual/expected saves and `SHORTCUT-TEST.txt`,
+  plus `.editor/PE-IMPORTS.txt` and `editor.map`. Preserve these ignored
+  artifacts before removing the worktree; no binaries or pictures are
+  published. The unrelated full playback matrix was not rerun.
+- Reviewed the full README and documented the four keys, focused command,
+  evidence and desktop requirements. The remaining probe, archive, viewer,
+  editor, save-protection and release guidance remains current. This is
+  modern-host keyboard evidence, not Windows 98/XP, physical-hardware,
+  original-reader, playback or editor-release qualification. The next
+  milestone remains a separately approved small effect family.
+
 ## Open blockers
 
 - The [five missing files](#recovered-and-missing-files) still need locating;

@@ -1826,11 +1826,12 @@ the refusal; probe, archive, viewer and release instructions still apply.
   visible controls. All six Python unit tests passed.
 - An independent check matched 264 retained Squeeze On RGB captures and
   80 exact VC10 saves, including the split boundaries and non-divisor
-  rounding samples in both Seek and Play. The ignored `.editor/`
-  directory holds `smoke-bql6vcav/`, `shortcuts-fz2ddr7h/`, the build
-  and command logs, and `ISSUE54-manifest.json` with 563 verified artifact
-  hashes. Preserve that evidence before worktree cleanup; no original
-  material or native captures are published.
+  rounding samples in both Seek and Play. The issue #54 evidence is
+  preserved in the primary checkout's ignored `inputs/issue-54-38d16a3/`
+  bundle: `smoke-bql6vcav/`, `shortcuts-fz2ddr7h/`, the build and command
+  logs, and `ISSUE54-manifest.json` with 563 verified artifact hashes.
+  Preservation is complete; no original material or native captures are
+  published.
 - Reviewed the full README and documented the new controls, behavior and
   scope of verification. All four required checks ran locally, not in CI.
   No Windows 98/XP guest, physical hardware, original-reader or release

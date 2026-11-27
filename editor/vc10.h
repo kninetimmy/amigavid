@@ -25,6 +25,8 @@
 #define VC_PEEL_DOWN 11
 #define VC_SQUEEZE_ON_UP 12
 #define VC_SQUEEZE_ON_DOWN 13
+#define VC_SQUEEZE_OFF_UP 14
+#define VC_SQUEEZE_OFF_DOWN 15
 #define VC_ROW_ONE 128U           /* A source-row increment in 7-bit fixed point. */
 
 struct vc_screen {

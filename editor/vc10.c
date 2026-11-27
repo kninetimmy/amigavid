@@ -85,7 +85,7 @@ int vc_place(struct vc_project *project, unsigned index, const struct vc_cue *cu
     unsigned long end;
 
     if (index > n || (index == n && n == VC_CUES) || cue->tick > VC_TICK_MAX ||
-        (cue->effect < VC_CUT || cue->effect > VC_SQUEEZE_ON_DOWN) ||
+        (cue->effect < VC_CUT || cue->effect > VC_SQUEEZE_OFF_DOWN) ||
         (cue->effect != VC_CUT && (!cue->a || cue->a > 255)))
         return 0;
     end = cue->tick + vc_length(cue);
@@ -230,7 +230,7 @@ const char *vc_read(struct vc_project *project, const char *data, size_t size)
         return "Invalid or empty cue list.";
     for (i = 0; i < count; ++i) {
         if (!number(&reader, VC_TICK_MAX, &cue.tick) ||
-            !word(&reader, VC_SQUEEZE_ON_DOWN, &cue.effect) || !cue.effect ||
+            !word(&reader, VC_SQUEEZE_OFF_DOWN, &cue.effect) || !cue.effect ||
             !word(&reader, project->screens + VC_FIRST_SCREEN - 1, &cue.screen) ||
             cue.screen < VC_FIRST_SCREEN ||
             !word(&reader, 65535, &cue.a) || !word(&reader, 65535, &cue.b) ||
@@ -311,6 +311,16 @@ struct vc_frame vc_at(const struct vc_project *project, unsigned long tick)
                 case VC_SQUEEZE_ON_UP:
                     /* CopLoop truncates the 7-bit increment before accumulating
                        it from source row zero, not after scaling each row. */
+                    frame.top_step = VC_HEIGHT * VC_ROW_ONE / frame.split;
+                    break;
+                case VC_SQUEEZE_OFF_UP:
+                    frame.top_row = VC_HEIGHT - frame.split;
+                    frame.bottom_step = VC_HEIGHT * VC_ROW_ONE / frame.top_row;
+                    break;
+                case VC_SQUEEZE_OFF_DOWN:
+                    frame.bottom = frame.top;
+                    frame.top = cue->screen;
+                    frame.split = (unsigned)distance;
                     frame.top_step = VC_HEIGHT * VC_ROW_ONE / frame.split;
                     break;
                 case VC_SLIDE_ON_DOWN:

@@ -75,21 +75,27 @@ def slide_pixels(effect, duration, elapsed, moved, first, second):
             other[y * 960:(y + 1) * 960] if value < 128 and y >= 2 * value
             else rows[y if y <= value else 2 * value - y]
             for y in range(256))
-    if effect in (12, 13):
-        # fx.c SqueezeOn Funcs, then CopLoop's outgoing row pointer. The
+    if effect in (12, 13, 14, 15):
+        # fx.c Squeeze Funcs, then CopLoop's scaled row pointer. The
         # modulo changes the advance AFTER the current fetch. DIVU chops
         # the increment first; keep the low seven bits between fetches.
-        height = (255 if effect == 12 else 256) - moved
+        height = {12: 255 - moved, 13: 256 - moved, 14: moved + 1, 15: moved}[effect]
+        picture = first if effect in (12, 13) else second
         advance = 32768 // height
         pointer, fraction = 0, 0
         rows = []
         for _ in range(height):
-            rows.append(first[pointer * 960:(pointer + 1) * 960])
+            rows.append(picture[pointer * 960:(pointer + 1) * 960])
             stride, fraction = divmod(fraction + advance, 128)
             pointer += stride
-        outgoing = b"".join(rows)
-        return outgoing + second[:(256 - height) * 960] if effect == 12 else \
-            second[height * 960:] + outgoing
+        scaled = b"".join(rows)
+        if effect == 12:
+            return scaled + second[:(256 - height) * 960]
+        if effect == 13:
+            return second[height * 960:] + scaled
+        if effect == 14:
+            return first[height * 960:] + scaled
+        return scaled + first[:(256 - height) * 960]
     raise ValueError(f"no source pixel expectation for effect {effect}")
 
 
@@ -122,6 +128,12 @@ def exercise(exe, digest, work, evidence):
     gdi = ct.WinDLL("gdi32", use_last_error=True)
     callback = ct.WINFUNCTYPE(w.BOOL, w.HWND, w.LPARAM)
 
+    class GuiThreadInfo(ct.Structure):
+        _fields_ = [("cbSize", w.DWORD), ("flags", w.DWORD),
+                    *((name, w.HWND) for name in
+                      ("active", "focus", "capture", "menu", "move", "caret")),
+                    ("rect", w.RECT)]
+
     def api(dll, name, result, *args):
         method = getattr(dll, name)
         method.restype, method.argtypes = result, args
@@ -132,7 +144,12 @@ def exercise(exe, digest, work, evidence):
     visible = api(user, "IsWindowVisible", w.BOOL, w.HWND)
     cls_of = api(user, "GetClassNameW", ct.c_int, w.HWND, w.LPWSTR, ct.c_int)
     get_child = api(user, "GetDlgItem", w.HWND, w.HWND, ct.c_int)
+    get_id = api(user, "GetDlgCtrlID", ct.c_int, w.HWND)
     find_child = api(user, "FindWindowExW", w.HWND, w.HWND, w.HWND, w.LPCWSTR, w.LPCWSTR)
+    get_rect = api(user, "GetWindowRect", w.BOOL, w.HWND, ct.POINTER(w.RECT))
+    to_screen = api(user, "ClientToScreen", w.BOOL, w.HWND, ct.POINTER(w.POINT))
+    hit_child = api(user, "ChildWindowFromPointEx", w.HWND, w.HWND, w.POINT, w.UINT)
+    gui_info = api(user, "GetGUIThreadInfo", w.BOOL, w.DWORD, ct.POINTER(GuiThreadInfo))
     post = api(user, "PostMessageW", w.BOOL, w.HWND, w.UINT, w.WPARAM, w.LPARAM)
     send = api(user, "SendMessageTimeoutW", w.LPARAM, w.HWND, w.UINT, w.WPARAM, w.LPARAM,
                w.UINT, w.UINT, ct.c_void_p)
@@ -208,6 +225,54 @@ def exercise(exe, digest, work, evidence):
 
     def sync(hwnd):
         checked(send(hwnd, 0, 0, 0, 2, 1000, None))
+
+    def activate_squeeze_off(proc, hwnd, button, keyboard):
+        child = checked(get_child(hwnd, button))
+        if keyboard:
+            thread = checked(pid_of(hwnd, None))
+
+            def focus():
+                info = GuiThreadInfo(cbSize=ct.sizeof(GuiThreadInfo))
+                checked(gui_info(thread, ct.byref(info)))
+                if info.active == hwnd and info.focus and pid_of(info.focus, None) == thread:
+                    return info.focus
+
+            initial = current = until(proc, focus, "focused editor control")
+            while current != child:
+                checked(post(current, 0x0100, 0x09, 1))  # WM_KEYDOWN, VK_TAB
+                current = until(proc, lambda: (target := focus()) and target != current and target,
+                                f"next Tab focus from control {get_id(current)} toward {button}")
+                require(current != initial, f"button {button} is missing from Tab order")
+            checked(post(child, 0x0100, 0x20, 1))  # Space through the button's key handling
+            checked(post(child, 0x0101, 0x20, 0xC0000001))
+            method = "Tab/Space"
+        else:
+            rect, origin = w.RECT(), w.POINT()
+            checked(get_rect(child, ct.byref(rect)))
+            checked(to_screen(hwnd, ct.byref(origin)))
+            left, top, right, bottom = (rect.left - origin.x, rect.top - origin.y,
+                                        rect.right - origin.x, rect.bottom - origin.y)
+            require(0 <= left < right <= 320 and 256 <= top < bottom <= 323,
+                    f"button {button} intrudes on preview or timeline")
+            neighbor = None
+            while neighbor := find_child(hwnd, neighbor, None, None):
+                if neighbor != child and visible(neighbor):
+                    other = w.RECT()
+                    checked(get_rect(neighbor, ct.byref(other)))
+                    require(rect.right <= other.left or other.right <= rect.left or
+                            rect.bottom <= other.top or other.bottom <= rect.top,
+                            f"button {button} overlaps another visible control")
+            point = w.POINT((left + right) // 2, (top + bottom) // 2)
+            require(hit_child(hwnd, point, 7) == child,
+                    f"button {button} did not win native hit testing at its center")
+            x, y = point.x - left, point.y - top
+            for msg, wp in ((0x0201, 1), (0x0202, 0)):
+                checked(send(child, msg, wp, x | (y << 16), 2, 1000, None))
+            method = f"mouse via native hit test at ({point.x}, {point.y}), rect {left, top, right, bottom}"
+        until(proc, lambda: find_child(hwnd, None, "STATIC",
+                                       "Cue added. Drag its timeline marker to change the start tick."),
+              f"cue addition via {method}")
+        return method
 
     def control_text(hwnd, id):
         actual = ct.create_unicode_buffer(512)
@@ -336,7 +401,8 @@ def exercise(exe, digest, work, evidence):
                    (6, 115, "Scroll Up"), (7, 116, "Scroll Down"),
                    (8, 117, "Reveal Up"), (9, 118, "Reveal Down"),
                    (10, 119, "Peel Up"), (11, 120, "Peel Down"),
-                   (12, 121, "Squeeze On Up"), (13, 122, "Squeeze On Down"))
+                   (12, 121, "Squeeze On Up"), (13, 122, "Squeeze On Down"),
+                   (14, 123, "Squeeze Off Up"), (15, 124, "Squeeze Off Down"))
     for effect, button, label in transitions:
         family = "squeeze" if effect >= 12 else "peel"
         for duration, samples in FIRST_SLIDE_SAMPLES.items():
@@ -353,7 +419,11 @@ def exercise(exe, digest, work, evidence):
                     open_file(hwnd, "ROWSA.IFF", 100)
                     open_file(hwnd, "ROWSB.IFF", 100)
                     edit(hwnd, 110, duration)
-                    command(hwnd, button)
+                    method = None
+                    if effect >= 14 and duration == 25:
+                        method = activate_squeeze_off(proc, hwnd, button, keyboard=bool(start))
+                    else:
+                        command(hwnd, button)
                     if start:
                         drag(hwnd, 0, start, span=153 if duration == 255 else 124)
                     for sampled, expected in checks_first.items():
@@ -362,6 +432,8 @@ def exercise(exe, digest, work, evidence):
                             retain(f"{family}-first-{effect}-{duration}-{start}-{sampled}.rgb", pixels)
                     open_file(hwnd, saved.name, 102)
                     require(saved.read_bytes() == expected_bytes, "first transition authored fields differ")
+                    if method:
+                        log.append(f"PASS {label}: {method} authored exact VC10 bytes at start {start}.")
                     if effect >= 10:
                         retain(saved.name, saved.read_bytes())
                     quit_editor(proc, hwnd)
@@ -373,8 +445,10 @@ def exercise(exe, digest, work, evidence):
                             log.append(f"PASS first {label} ID {effect}, a={duration}, start={start}, "
                                        f"tick={sampled}: RGB24 SHA-256 {expected}")
                     for sampled, expected in checks_first.items():
-                        play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
-                                     lambda: frame(hwnd), log)
+                        pixels = play_capture(sampled, expected, lambda: play_stop(proc, hwnd, sampled),
+                                              lambda: frame(hwnd), log)
+                        if effect >= 14:
+                            retain(f"{family}-first-play-{effect}-{duration}-{start}-{sampled}.rgb", pixels)
                     command(hwnd, 105)
                     until(proc, lambda: find_child(hwnd, None, "STATIC", "Playback complete."),
                           "first transition playback completion")
@@ -476,24 +550,33 @@ def exercise(exe, digest, work, evidence):
                     appended += f"71\n{effect}\n7\n255\n0\n0\n0\n0\n0\nNOTEXT\n".encode("ascii")
                     require(valid.read_bytes() == appended, f"{label}: native 255 replacement saved fields")
                     open_file(hwnd, saved.name, 101)
+                    if effect >= 14:
+                        capture(proc, hwnd, 35, checks_slide[35])
+
+                    def refuse_transition(data, reason):
+                        (work / "bad-slide.vid").write_bytes(data)
+                        open_file(hwnd, "bad-slide.vid", 101, modal=True)
+                        dialog(proc, reason)
+                        if effect >= 14:
+                            require(control_text(hwnd, 111) == "35" and sha(frame(hwnd)) == checks_slide[35],
+                                    f"{label}: refused open changed the current preview")
+
                     for invalid in (0, 256):
                         bad = expected_bytes.replace(
                             f"25\n{effect}\n7\n25\n".encode("ascii"),
                             f"25\n{effect}\n7\n{invalid}\n".encode("ascii"))
-                        (work / "bad-slide.vid").write_bytes(bad)
-                        open_file(hwnd, "bad-slide.vid", 101, modal=True)
-                        dialog(proc, "Invalid or unsupported")
-                    for unsupported in (0, 14, 49, 900):
+                        refuse_transition(bad, "Invalid or unsupported")
+                    for unsupported in (0, 16, 49, 900):
                         bad = expected_bytes.replace(f"25\n{effect}\n7\n".encode("ascii"),
                                                      f"25\n{unsupported}\n7\n".encode("ascii"))
-                        (work / "bad-slide.vid").write_bytes(bad)
-                        open_file(hwnd, "bad-slide.vid", 101, modal=True)
-                        dialog(proc, "Invalid or unsupported")
-                    (work / "bad-slide.vid").write_bytes(
-                        expected_bytes.replace(f"25\n{effect}\n7\n".encode("ascii"),
-                                               f"0\n{effect}\n7\n".encode("ascii")))
-                    open_file(hwnd, "bad-slide.vid", 101, modal=True)
-                    dialog(proc, "must not overlap")
+                        refuse_transition(bad, "Invalid or unsupported")
+                    refuse_transition(expected_bytes.replace(f"25\n{effect}\n7\n".encode("ascii"),
+                                                             f"0\n{effect}\n7\n".encode("ascii")),
+                                      "must not overlap")
+                    if effect >= 14:
+                        retain(f"squeeze-refused-{effect}.rgb", frame(hwnd))
+                        require(saved.read_bytes() == expected_bytes, f"{label}: refused open changed saved bytes")
+                        log.append(f"PASS {label}: refused opens left the current tick 35 frame and file unchanged.")
                     drag(hwnd, 25, 0)
                     capture(proc, hwnd, 35, checks_slide[35])
                 roundtrip = work / f"again-{effect}-{duration}.vid"

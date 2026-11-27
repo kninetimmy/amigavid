@@ -301,10 +301,11 @@ For a fast, deterministic check of timed Play retry diagnostics, run separately:
 python -m unittest discover -s tools -p test_play_capture.py
 ```
 
-These three tests use controlled stop ticks and frames; no archive, compiler,
+These four tests use controlled stop ticks and frames; no archive, compiler,
 built executable or interactive desktop is needed. They check retry attempt
-order, immediate frame-mismatch failure and successful retry logging. They do
-not replace native `smoke`, measure playback timing or qualify Windows 98/XP.
+order, immediate frame-mismatch failure and successful retry logging after a
+skipped tick or no observed stop. They do not replace native `smoke`, measure
+playback timing or qualify Windows 98/XP.
 
 For the optional native clipboard regression, build the guest-only driver:
 

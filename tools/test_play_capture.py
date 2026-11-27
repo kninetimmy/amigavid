@@ -51,6 +51,20 @@ class PlayCaptureTests(unittest.TestCase):
         frame.assert_called_once_with()
         self.assertEqual(log, ["RETRY timed Play skipped tick 10, stopped at 11."])
 
+    def test_no_stop_then_correct_frame_passes_and_keeps_retry_log(self):
+        stop = Mock(side_effect=[None, 10])
+
+        def capture():
+            self.assertEqual(stop.call_count, 2)
+            return PIXELS
+
+        frame = Mock(side_effect=capture)
+        log = []
+        self.assertEqual(play_capture(10, EXPECTED, stop, frame, log), PIXELS)
+        self.assertEqual(stop.call_count, 2)
+        frame.assert_called_once_with()
+        self.assertEqual(log, ["RETRY timed Play requested tick 10, no stop observed."])
+
 
 if __name__ == "__main__":
     unittest.main()

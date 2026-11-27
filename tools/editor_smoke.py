@@ -117,7 +117,9 @@ def play_capture(tick, expected, stop, frame, log):
             require(hashlib.sha256(pixels).hexdigest() == expected,
                      f"timed Play frame at tick {tick}")
             return pixels
-        if actual is not None:
+        if actual is None:
+            log.append(f"RETRY timed Play requested tick {tick}, no stop observed.")
+        else:
             log.append(f"RETRY timed Play skipped tick {tick}, stopped at {actual}.")
     raise ValueError(f"timed Play did not stop at tick {tick} in three attempts; "
                      f"stop ticks by attempt: {stops} (None means no stop observed)")

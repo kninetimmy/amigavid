@@ -1140,8 +1140,8 @@ the refusal; probe, archive, viewer and release instructions still apply.
 - `python tools/editor.py smoke` **passed (exit 0)** locally, not in CI,
   on Windows 11 x64 build 26300 with Python 3.14.4. All 24 first-slide and
   24 Cut-then-slide cases passed, along with existing artwork, metadata,
-  timeline, containment and save/recovery checks. No timed sample needed
-  a retry in this run. Local evidence: `.editor/ISSUE30-unit.txt`,
+  timeline, containment and save/recovery checks. No timed Play retry was
+  logged in this run. Local evidence: `.editor/ISSUE30-unit.txt`,
   `ISSUE30-build.txt`, `ISSUE30-smoke.txt` and `.editor/HOST-SMOKE.txt`.
 - The full README was reviewed and remains accurate without changes,
   including setup, controls, save protection and host/guest limits.
@@ -1259,7 +1259,7 @@ the refusal; probe, archive, viewer and release instructions still apply.
   refused UI/import durations, unsupported IDs and conflicting imports/
   drags preserve the document. Existing artwork, Cut, all slides, marker
   gestures, containment and save/recovery checks also pass.
-- No timed Play sample needed a retry in the final smoke. The expanded
+- No timed Play retries were logged in the final smoke. The expanded
   model test failed against the pre-implementation model (exit 1 at
   `vc_place` for newly supported ID 6); `.editor/ISSUE42-test-before.txt`
   retains that result. An initial smoke was deliberately stopped after
@@ -1306,7 +1306,7 @@ the refusal; probe, archive, viewer and release instructions still apply.
   `python tools/editor.py smoke` and
   `python -m unittest discover -s tools -p test_play_capture.py` (**3 tests**).
   The full smoke retains all 120 author/reopen cases, eight adjacent
-  sequences and existing regression checks; no Play sample needed a retry.
+  sequences and existing regression checks; no timed Play retry was logged.
   Host: Windows 11 Pro x64 `26300.9974`, NTFS, Python 3.14.4, GCC 16.1.0.
   The verified Watcom pin and PE/import profile above are unchanged.
   Repaired `VCEDIT.EXE` SHA-256:
@@ -1398,7 +1398,7 @@ the refusal; probe, archive, viewer and release instructions still apply.
   and prior regressions. Native selection replacement and character messages
   now cover 112 duration refusals with unchanged saved bytes, plus eight
   valid replacements to 255 with exact saved cues, without any clipboard API.
-  No timed Play sample needed a retry.
+  No timed Play retry was logged.
   The first smoke invocation hit its outer 120-second timeout (exit 143),
   not a reported assertion failure; its log is retained separately.
   Repaired `VCEDIT.EXE` SHA-256:
@@ -1546,7 +1546,7 @@ the refusal; probe, archive, viewer and release instructions still apply.
   paired-target/metadata round-trips, 140 native duration refusals and ten
   valid replacements to 255. Existing Cut, slides, Scroll/Reveal, original
   artwork, marker gestures, containment and save/recovery checks pass.
-  No timed Play sample needed a retry.
+  No timed Play retry was logged.
 - The first native smoke command hit its 1,200-second outer timeout
   (exit 143) during Cut-then-Reveal Down, before reaching the Cut-then-Peel
   cases. No assertion failure was reported; it is not a completed smoke
@@ -1602,8 +1602,8 @@ the refusal; probe, archive, viewer and release instructions still apply.
   **passed (exit 0, 23m 30s)**. It covered 96 first-transition cases,
   60 Cut-then-transition cases, 12 adjacent sequences, and the existing
   duration, marker, replay, containment and save/recovery checks, with no
-  timed Play retries. `.editor/smoke-n74j2k0w/` retained 150 RGBs, 40 VID
-  copies and `HOST-SMOKE.txt` (SHA-256
+  logged timed Play retries. `.editor/smoke-n74j2k0w/` retained 150 RGBs,
+  40 VID copies and `HOST-SMOKE.txt` (SHA-256
   `8560bf2b595564c55316b138cc04e0e19091e8a7dc3cad8665f65fcda0e53bd4`).
 - The local evidence check confirmed both announced paths, exact file
   inventories, all 150 complete-run capture hashes, and unchanged bytes
@@ -1816,8 +1816,8 @@ the refusal; probe, archive, viewer and release instructions still apply.
   and 72 Cut-then-transition cases, including 36 Squeeze On cases at
   durations 1/2/19/25/65/255. First cues start at tick 0 or 1; cues after
   Cut start at 25. Seek and timed Play matched all 81,920 pixels at each
-  sampled tick, with no Play retries. Of 18 adjacent sequences, six
-  followed Squeeze On at durations 1/25/255 and showed no residual
+  sampled tick, with no logged timed Play retries. Of 18 adjacent sequences,
+  six followed Squeeze On at durations 1/25/255 and showed no residual
   scaling or offset. Refused opens (including ID 14) left the preview
   and saved bytes unchanged. Earlier native regression cases passed.
 - `python tools/editor.py shortcut_test` passed (exit 0, 8/8).
@@ -1872,8 +1872,8 @@ the refusal; probe, archive, viewer and release instructions still apply.
   malformed/unsupported/unsafe cases and NT save protections passed.
 - `python tools/editor.py smoke` passed (exit 0): 144 first-cue cases,
   84 Cut-then-transition cases and 24 legally adjacent sequences, with no
-  timed Play retries. Squeeze Off contributed 36 transition cases and six
-  adjacent sequences at durations 1, 25 and 255. The native mouse hit
+  logged timed Play retries. Squeeze Off contributed 36 transition cases
+  and six adjacent sequences at durations 1, 25 and 255. The native mouse hit
   test and Tab/Space each authored the expected bytes for both controls,
   with no overlap. Refused imports (including ID 16) left the current
   tick-35 preview and saved bytes unchanged; imported nondefault fields
@@ -1895,6 +1895,32 @@ the refusal; probe, archive, viewer and release instructions still apply.
   controls. All four required checks ran locally, not in CI. No Windows
   98/XP guest, physical hardware, original-reader or release qualification
   was performed for this build.
+
+## Timed Play no-stop retry reporting - issue #60 (2026-11-27)
+
+- A timed Play attempt with no observed stop now appends one `RETRY timed
+  Play` entry naming the requested tick, without assuming a timeout cause.
+  A later matching tick/frame retains that entry. The skipped-tick message,
+  immediate frame-mismatch failure and three-attempt ordered-stop diagnostic
+  are unchanged; no native editor behavior changed.
+- Earlier timed Play retry counts above are logged counts: previous reporting
+  could omit attempts with no observed stop. The recorded test outcomes and
+  evidence provenance are unchanged; unrelated file-save retries are unchanged.
+- Test-first red: `python -B -m unittest discover -s tools
+  -p test_play_capture.py -k no_stop_then_correct_frame -v` failed (exit 1)
+  because the retry log was empty after controlled stops `None` then `10`.
+  After the fix, `python -B -m unittest discover -s tools
+  -p test_play_capture.py -v` passed (4 tests, exit 0), and required
+  `python -B -m unittest discover -s tools -p "test_*.py" -v` passed
+  (7 tests, exit 0). These checks ran locally, not in CI.
+- A controlled report-publication check passed using real `play_capture`
+  and `editor.smoke` with native setup/exercise substituted: only the matching
+  attempt captured a frame, and the completed `HOST-SMOKE.txt` retained the
+  no-stop retry. Its temporary workspace and report were removed.
+- Reviewed the full README; updated the timed Play test count and no-stop
+  coverage. No other README change was needed for this diagnostic fix.
+  Native smoke/build, Windows 98/XP guest, physical-hardware, original-reader
+  and release qualification were not rerun or newly claimed.
 
 ## Open blockers
 

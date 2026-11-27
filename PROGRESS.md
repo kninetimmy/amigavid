@@ -1780,7 +1780,7 @@ the refusal; probe, archive, viewer and release instructions still apply.
   and `vc/neweffects.c:1122–1144,1231–1251,1503–1518,1939–1940`.
   IDs 12/13 use the shared screen class, placement length, field step and
   duration range 1–255 (default 25). VC10 preserves their timing, screen,
-  parameters and text. IDs above 13 are still refused.
+  parameters and text. That build refused IDs above 13.
 - `vc/fx.c:775–857` sets Up's split and outgoing height to `Value`, with
   incoming row 0 at the split. Down sets the split to `Value`, starts the
   incoming picture at source row `256 - Value`, and squashes the outgoing
@@ -1837,6 +1837,64 @@ the refusal; probe, archive, viewer and release instructions still apply.
   No Windows 98/XP guest, physical hardware, original-reader or release
   qualification was performed for this build.
 
+## Milestone 4 batch 5 - Squeeze Off Up and Down
+
+- The pinned archive was reverified before checking the original Squeeze Off
+  behavior. VC10 IDs 14/15 use the same 1–255 duration, timeline placement
+  and field timing as the earlier vertical transitions. Both can be the
+  first cue (from black) or follow a Cut. IDs above 15 remain unsupported.
+- Up skips `256 - Value` outgoing rows, shows the rest above the split and
+  fits the incoming picture below it. Down fits the incoming picture above
+  the split and shows the outgoing picture starting at row zero below it.
+  The scaled region starts at incoming row zero and advances after each
+  fetch by `floor(32768 / height)` with seven fractional bits. At positive
+  start plus 10 ticks with duration 25, Up splits at row 123 and maps output
+  row 136 to incoming row 24; Down splits at row 132 and maps output row 33
+  to incoming row 63. These are logical row selections, not Amiga scanout
+  measurements. Both one-tick cues reach the target immediately, and the
+  next cue starts without the previous scaling or row offset.
+- The new controls are below the preview. Click them, or reach them with
+  Tab and activate them with Space. No new accelerator is assigned, and the
+  timeline still starts at client row 323. The multiline **Ticks** field
+  now passes Tab and Shift+Tab to native focus navigation while retaining
+  multiline paste validation.
+
+### Host verification - 2026-11-27 UTC
+
+- `python tools/editor.py build` and `python tools/editor.py test` passed
+  (exit 0) on Windows 11 Pro x64 `26300.9974`, NTFS, Python 3.14.4 and
+  GCC 16.1.0. The build reverified the pinned Open Watcom cache without a
+  download. `VCEDIT.EXE` is x86 PE32 GUI 4.0 with static WinMain startup,
+  direct GDI32/KERNEL32/USER32 imports, and no delay imports. SHA-256:
+  `1db114d0f05fd709abf71855c99b26f7dd6b92bf936ecbbfb4dd7ec7cba84528`.
+- Model tests covered IDs 1–15, exact LF/CRLF round-trips, field timing,
+  duration and placement limits, scaling and adjacent-cue reset. The 27
+  malformed/unsupported/unsafe cases and NT save protections passed.
+- `python tools/editor.py smoke` passed (exit 0): 144 first-cue cases,
+  84 Cut-then-transition cases and 24 legally adjacent sequences, with no
+  timed Play retries. Squeeze Off contributed 36 transition cases and six
+  adjacent sequences at durations 1, 25 and 255. The native mouse hit
+  test and Tab/Space each authored the expected bytes for both controls,
+  with no overlap. Refused imports (including ID 16) left the current
+  tick-35 preview and saved bytes unchanged; imported nondefault fields
+  survived resave. The first smoke attempt stopped with a Python
+  `MemoryError` before the new effects; the next exposed the Ticks Tab
+  stop, reproduced and fixed before the final run.
+- `python tools/editor.py shortcut_test` passed (exit 0, 8/8), with all
+  eight previous shortcuts unique and unchanged. All six Python unit tests
+  also passed.
+- A separate checker matched 362 full 320×256 RGB captures and 80 exact
+  VC10 saves for IDs 14/15, including both split boundaries and the
+  non-ideal scaling samples in Seek and Play. Archive the completed
+  reports, captures, saves, build/command logs and `ISSUE58-manifest.json`
+  at the primary checkout's ignored `inputs/issue-58-squeeze-off/` before
+  removing the worktree. All 1,012 artifact hashes were checked in staging;
+  original material and the evidence remain private.
+- Reviewed the full README and updated its supported IDs, behavior and
+  controls. All four required checks ran locally, not in CI. No Windows
+  98/XP guest, physical hardware, original-reader or release qualification
+  was performed for this build.
+
 ## Open blockers
 
 - The [five missing files](#recovered-and-missing-files) still need locating;
@@ -1860,9 +1918,10 @@ independent development step; the viewer now has host and four-guest
 evidence under #16's calibrated-output criterion. Before milestone 3,
 the next step was to edit, save, reopen and replay one sequence. The
 two-picture workflow is now implemented, followed by the vertical slide,
-Scroll Up/Down (6/7), Reveal Up/Down (8/9), Peel Up/Down (10/11) and
-Squeeze On Up/Down (12/13) families above. The rest of milestone 4 and
-special screens remain outstanding; choose the next small effect family
-through a separately approved plan. Obtain physical Windows 98 and XP
-[probe target-checklist](probe/TEST.TXT) results before claiming native
-hardware validation. Editor-release workflows remain unverified.
+Scroll Up/Down (6/7), Reveal Up/Down (8/9), Peel Up/Down (10/11),
+Squeeze On Up/Down (12/13) and Squeeze Off Up/Down (14/15) families above.
+The rest of milestone 4 and special screens remain outstanding; choose
+the next small effect family through a separately approved plan. Obtain
+physical Windows 98 and XP [probe target-checklist](probe/TEST.TXT) results
+before claiming native hardware validation. Editor-release workflows
+remain unverified.

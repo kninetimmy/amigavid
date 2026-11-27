@@ -14,7 +14,7 @@ static void placement_checks(void)
 
     cut.effect = VC_CUT;
     cut.screen = slide.screen = VC_FIRST_SCREEN;
-    for (effect = VC_SLIDE; effect <= VC_SQUEEZE_ON_DOWN; ++effect) {
+    for (effect = VC_SLIDE; effect <= VC_SQUEEZE_OFF_DOWN; ++effect) {
         for (a = 1; a <= 255; a += 254) {
             vc_init(&project);
             assert(vc_place(&project, 0, &cut));
@@ -44,7 +44,7 @@ static void placement_checks(void)
             invalid = slide;
             invalid.effect = 0;
             assert(!vc_place(&project, 1, &invalid));
-            invalid.effect = 14;
+            invalid.effect = 16;
             assert(!vc_place(&project, 1, &invalid));
             invalid.effect = 900;
             assert(!vc_place(&project, 1, &invalid));
@@ -123,6 +123,55 @@ static void squeeze_checks(void)
     }
 }
 
+static void squeeze_off_checks(void)
+{
+    static const unsigned durations[] = { 1, 25, 255 }, lengths[] = { 2, 22, 129 };
+    struct vc_cue cue = { 0 };
+    struct vc_frame frame;
+    unsigned effect, i;
+
+    for (effect = VC_SQUEEZE_OFF_UP; effect <= VC_SQUEEZE_OFF_DOWN; ++effect) {
+        for (i = 0; i < sizeof(durations) / sizeof(*durations); ++i) {
+            vc_init(&project);
+            cue.tick = 0;
+            cue.effect = VC_CUT;
+            cue.screen = 6;
+            cue.a = 0;
+            assert(vc_place(&project, 0, &cue));
+            cue.tick = 25;
+            cue.effect = effect;
+            cue.screen = 7;
+            cue.a = durations[i];
+            assert(vc_place(&project, 1, &cue));
+            frame = vc_at(&project, 35);
+            if (cue.a == 25 && effect == VC_SQUEEZE_OFF_UP) {
+                assert(frame.top == 6 && frame.bottom == 7 && frame.split == 123);
+                assert(frame.top_row == 133 && frame.bottom_row == 0);
+                assert(frame.top_step == 128 && frame.bottom_step == 246);
+                assert((136 - frame.split) * frame.bottom_step / 128 == 24);
+            } else if (cue.a == 25) {
+                assert(frame.top == 7 && frame.bottom == 6 && frame.split == 132);
+                assert(frame.top_row == 0 && frame.bottom_row == 0);
+                assert(frame.top_step == 248 && frame.bottom_step == 128);
+                assert(33 * frame.top_step / 128 == 63);
+            }
+            frame = vc_at(&project, cue.tick + (cue.a == 1 ? 0 : lengths[i] - 1));
+            assert(frame.top == 7 && frame.split == 256);
+            assert(!frame.top_row && !frame.bottom_row);
+            assert(frame.top_step == 128 && frame.bottom_step == 128);
+            cue.tick += lengths[i];
+            cue.effect = VC_SLIDE;
+            cue.screen = 6;
+            cue.a = 19;
+            assert(vc_place(&project, 2, &cue));
+            frame = vc_at(&project, cue.tick);
+            assert(frame.top == 7 && frame.bottom == 6 && frame.split == 241);
+            assert(!frame.top_row && !frame.bottom_row);
+            assert(frame.top_step == 128 && frame.bottom_step == 128);
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     FILE *file;
@@ -135,6 +184,7 @@ int main(int argc, char **argv)
     placement_checks();
     peel_checks();
     squeeze_checks();
+    squeeze_off_checks();
     if (argc != 3 || !(file = fopen(argv[1], "rb")))
         return 2;
     size = fread(input, 1, sizeof(input), file);

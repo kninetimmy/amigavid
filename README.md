@@ -33,7 +33,8 @@ saves, reopens and replays the sequence.
 Milestone 4 adds **Slide On Down**, **Slide Off Up** and **Slide Off Down**
 (VC10 IDs 3–5), followed by **Scroll Up**, **Scroll Down**, **Reveal Up**
 and **Reveal Down** (IDs 6–9), **Peel Up** and **Peel Down** (IDs 10/11),
-and **Squeeze On Up** and **Squeeze On Down** (IDs 12/13).
+**Squeeze On Up** and **Squeeze On Down** (IDs 12/13), and
+**Squeeze Off Up** and **Squeeze Off Down** (IDs 14/15).
 These additions have Windows 11 host checks, not guest qualification.
 
 **The first useful workflow has been demonstrated in QEMU:** on Windows
@@ -342,8 +343,11 @@ pictures to that folder first. It must be on local FAT on Windows 98.
    **Add Slide On Up**, **Add Slide On Down**, **Add Slide Off Up** or
    **Add Slide Off Down**, or choose **Add Scroll Up**, **Add Scroll Down**,
    **Add Reveal Up**, **Add Reveal Down**, **Add Peel Up**, **Add Peel Down**,
-   **Add Squeeze On Up** or **Add Squeeze On Down**. The Squeeze On buttons
-   sit below the preview and are reachable with Tab; neither adds an Alt key.
+   **Add Squeeze On Up**, **Add Squeeze On Down**, **Add Squeeze Off Up**
+   or **Add Squeeze Off Down**. The four Squeeze buttons sit below the
+   preview. Click one or reach it with Tab and press Space; no new Alt keys
+   are assigned. Either Squeeze Off effect can also be the first cue;
+   its outgoing picture is then black.
    The screen list selects the target for the next cue; **Ticks** sets
    the transition duration parameter
    (1–255, default 25), in 25ths of a second. Paste one duration, with no line
@@ -412,8 +416,16 @@ author/save/reopen and exact row-card pixels through Seek and Play, including
 durations 1, 25 and 255. See the
 [Squeeze On evidence](PROGRESS.md#milestone-4-batch-4--squeeze-on-up-and-down).
 
+Squeeze Off scales the incoming picture instead. Up moves the outgoing
+picture up and fits the incoming picture below it. Down fits the incoming
+picture at the top and moves the outgoing picture down, starting that
+picture at source row zero. Both directions use the original fixed-point
+row selection, settle on the target immediately at one tick and clear
+the temporary scaling and offset before the next cue. See the Windows 11
+[Squeeze Off evidence](PROGRESS.md#milestone-4-batch-5--squeeze-off-up-and-down).
+
 The editor preserves active VC10 screen order, paired references, author,
-track number, and supported effect IDs 1–13 with their timing, parameters and text.
+track number, and supported effect IDs 1–15 with their timing, parameters and text.
 It previews the first member of a pair only; Psycho Flicker and CD audio are not
 implemented. Other effect IDs, special screen IDs, object tables and
 malformed files are refused without replacing the open document. To replace a

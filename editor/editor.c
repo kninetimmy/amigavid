@@ -20,7 +20,8 @@ enum {
     PLAY, STOP, SEEK, PICTURES, NAME, DURATION, TICK,
     ADD_SLIDE_ON_DOWN, ADD_SLIDE_OFF_UP, ADD_SLIDE_OFF_DOWN,
     ADD_SCROLL_UP, ADD_SCROLL_DOWN, ADD_REVEAL_UP, ADD_REVEAL_DOWN,
-    ADD_PEEL_UP, ADD_PEEL_DOWN, ADD_SQUEEZE_ON_UP, ADD_SQUEEZE_ON_DOWN
+    ADD_PEEL_UP, ADD_PEEL_DOWN, ADD_SQUEEZE_ON_UP, ADD_SQUEEZE_ON_DOWN,
+    ADD_SQUEEZE_OFF_UP, ADD_SQUEEZE_OFF_DOWN
 };
 
 static struct document {
@@ -61,6 +62,8 @@ static const char *effect_name(unsigned effect)
     case VC_PEEL_DOWN: return "Peel Down";
     case VC_SQUEEZE_ON_UP: return "Squeeze On Up";
     case VC_SQUEEZE_ON_DOWN: return "Squeeze On Down";
+    case VC_SQUEEZE_OFF_UP: return "Squeeze Off Up";
+    case VC_SQUEEZE_OFF_DOWN: return "Squeeze Off Down";
     }
     return "Unsupported";
 }
@@ -519,6 +522,8 @@ static LRESULT CALLBACK proc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case ADD_PEEL_DOWN: stop(); add_cue(VC_PEEL_DOWN); return 0;
         case ADD_SQUEEZE_ON_UP: stop(); add_cue(VC_SQUEEZE_ON_UP); return 0;
         case ADD_SQUEEZE_ON_DOWN: stop(); add_cue(VC_SQUEEZE_ON_DOWN); return 0;
+        case ADD_SQUEEZE_OFF_UP: stop(); add_cue(VC_SQUEEZE_OFF_UP); return 0;
+        case ADD_SQUEEZE_OFF_DOWN: stop(); add_cue(VC_SQUEEZE_OFF_DOWN); return 0;
         case PLAY:
             if (!doc->project.cues)
                 return 0;
@@ -767,15 +772,17 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
         !control("BUTTON", "Add Revea&l Down", WS_TABSTOP, 464, 238, 118, 23, ADD_REVEAL_DOWN) ||
         !control("BUTTON", "Add P&eel Up", WS_TABSTOP, 332, 265, 118, 23, ADD_PEEL_UP) ||
         !control("BUTTON", "&Add Peel Down", WS_TABSTOP, 464, 265, 118, 23, ADD_PEEL_DOWN) ||
-        !control("BUTTON", "Add Squeeze On Up", WS_TABSTOP, 8, 265, 146, 23, ADD_SQUEEZE_ON_UP) ||
-        !control("BUTTON", "Add Squeeze On Down", WS_TABSTOP, 166, 265, 146, 23, ADD_SQUEEZE_ON_DOWN) ||
+        !control("BUTTON", "Add Squeeze On Up", WS_TABSTOP, 8, 257, 146, 18, ADD_SQUEEZE_ON_UP) ||
+        !control("BUTTON", "Add Squeeze On Down", WS_TABSTOP, 166, 257, 146, 18, ADD_SQUEEZE_ON_DOWN) ||
+        !control("BUTTON", "Add Squeeze Off Up", WS_TABSTOP, 8, 276, 146, 18, ADD_SQUEEZE_OFF_UP) ||
+        !control("BUTTON", "Add Squeeze Off Down", WS_TABSTOP, 166, 276, 146, 18, ADD_SQUEEZE_OFF_DOWN) ||
         !control("BUTTON", "&Play", WS_TABSTOP, 332, 292, 65, 23, PLAY) ||
         !control("BUTTON", "S&top", WS_TABSTOP, 401, 292, 65, 23, STOP) ||
         !(position = control("EDIT", "0", WS_BORDER | WS_TABSTOP | ES_NUMBER,
                              475, 292, 54, 22, TICK)) ||
         !control("BUTTON", "See&k", WS_TABSTOP, 533, 292, 49, 23, SEEK) ||
         !(status = control("STATIC", "Enter a filename from the workspace.", 0,
-                           16, 292, 304, 27, 0))) {
+                           16, 296, 304, 27, 0))) {
         error("Cannot initialize editor controls.");
         goto done;
     }
@@ -786,11 +793,16 @@ int WINAPI WinMain(HINSTANCE instance, HINSTANCE previous, LPSTR args, int show)
     refresh();
     ShowWindow(window, show);
     SetFocus(files);
-    while ((result = GetMessageA(&msg, NULL, 0, 0)) > 0)
-        if (!TranslateAcceleratorA(window, keys, &msg) && !IsDialogMessageA(window, &msg)) {
+    while ((result = GetMessageA(&msg, NULL, 0, 0)) > 0) {
+        /* The multiline Ticks edit claims Tab. Keep it multiline for paste
+           validation, but move to the next or previous dialog control. */
+        if (msg.hwnd == duration && msg.message == WM_KEYDOWN && msg.wParam == VK_TAB) {
+            SetFocus(GetNextDlgTabItem(window, duration, GetKeyState(VK_SHIFT) < 0));
+        } else if (!TranslateAcceleratorA(window, keys, &msg) && !IsDialogMessageA(window, &msg)) {
             TranslateMessage(&msg);
             DispatchMessageA(&msg);
         }
+    }
     result = result < 0 ? 1 : (int)msg.wParam;
 
 done:

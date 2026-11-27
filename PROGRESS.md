@@ -1885,11 +1885,12 @@ the refusal; probe, archive, viewer and release instructions still apply.
   also passed.
 - A separate checker matched 362 full 320×256 RGB captures and 80 exact
   VC10 saves for IDs 14/15, including both split boundaries and the
-  non-ideal scaling samples in Seek and Play. Archive the completed
-  reports, captures, saves, build/command logs and `ISSUE58-manifest.json`
-  at the primary checkout's ignored `inputs/issue-58-squeeze-off/` before
-  removing the worktree. All 1,012 artifact hashes were checked in staging;
-  original material and the evidence remain private.
+  non-ideal scaling samples in Seek and Play. Preservation is complete:
+  the reports, captures, saves, build/command logs and `ISSUE58-manifest.json`
+  are in the primary checkout's ignored `inputs/issue-58-squeeze-off/`.
+  The manifest SHA-256, exact inventory and all 1,012 artifact SHA-256
+  hashes were verified there after copying. Original material and the
+  evidence remain private.
 - Reviewed the full README and updated its supported IDs, behavior and
   controls. All four required checks ran locally, not in CI. No Windows
   98/XP guest, physical hardware, original-reader or release qualification
